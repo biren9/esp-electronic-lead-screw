@@ -21,7 +21,29 @@
 #define MICROSTEPS_PER_REVOLUTION 400
 #define SPINDEL_THREAD_PITCH 1.5f // value in mm
 
-enum ButtonMode { idl, pressed, releasedShort, releasedLong };
+// Buttons
+#define BUTTON_ADD_PIN 23
+#define BUTTON_ADD_INDEX 0
+
+#define BUTTON_REMOVE_PIN 18
+#define BUTTON_REMOVE_INDEX 1
+
+#define BUTTON_A_PIN 13
+#define BUTTON_A_INDEX 2
+
+#define BUTTON_B_PIN 17
+#define BUTTON_B_INDEX 3
+
+#define BUTTON_JOG_LEFT_PIN 33
+#define BUTTON_JOG_RIGHT_PIN 35
+
+enum ButtonState { idl, pressed, releasedShort, releasedLong, handledShort, handledLong };
+struct ButtonConfig { 
+  int pin; 
+  ButtonState state;
+  int64_t pressTime;
+  int64_t releaseTime;
+};
 
 enum JOGMode { left, neutral, right };
 JOGMode currentJogMode = neutral;
@@ -102,7 +124,7 @@ void startSingleStep(bool dir, bool isJog) {
 
   //Compensate Backlash
   if (needBacklashCompensation) {
-    for (int backlashStep = 0; backlashStep <= backlashInSteps; ++backlashStep) {
+    for (int backlashStep = 1; backlashStep <= backlashInSteps; ++backlashStep) {
       digitalWrite(STEP_PIN, HIGH);
       delayMicroseconds(500);
       digitalWrite(STEP_PIN, LOW);
@@ -162,36 +184,63 @@ void startSingleStep(bool dir, bool isJog) {
   directionChanged = false;
 }
 
-#define BUTTON_ADD_PIN 23
-#define BUTTON_ADD_INDEX 0
+ButtonConfig buttonConfigs[4] = {
+  ButtonConfig{BUTTON_ADD_PIN, idl, 0, 0},
+  ButtonConfig{BUTTON_REMOVE_PIN, idl, 0, 0},
+  ButtonConfig{BUTTON_A_PIN, idl, 0, 0},
+  ButtonConfig{BUTTON_B_PIN, idl, 0, 0}
+};
 
-#define BUTTON_REMOVE_PIN 18
-#define BUTTON_REMOVE_INDEX 1
-
-#define BUTTON_A_PIN 13
-#define BUTTON_A_INDEX 2
-
-#define BUTTON_B_PIN 17
-#define BUTTON_B_INDEX 3
-
-#define BUTTON_JOG_LEFT_PIN 33
-#define BUTTON_JOG_RIGHT_PIN 35
-
-bool buttonActive[4] = {false, false, false, false};
-
-bool isButtonSelected(uint8_t pin, uint8_t index) {
-  for (int i=0; i<3; ++i) {
-    if (digitalRead(pin) == HIGH) {
-      buttonActive[index] = false;
-      return false;
-    }
-    delay(10);
-  }
-  if (!buttonActive[index]) {
-    buttonActive[index] = true;
-    return true;
+void resetButtonToIdl(ButtonConfig* button) {
+  if (button->state == releasedLong) {
+    button->state = handledLong;
+    button->pressTime = button->releaseTime;
+    button->releaseTime = 0;
+  } else if (button->state == releasedShort) {
+    button->state = handledShort;
+    button->pressTime = 0;
+    button->releaseTime = 0;
   } else {
-    return false;
+    button->state = idl;
+    button->pressTime = 0;
+    button->releaseTime = 0;
+  }
+}
+
+bool isLongPress(int64_t start, int64_t end) {
+  if (end - start >= 500) {
+    return true;
+  }
+  return false;
+}
+
+// TODO multiple long press detection not working?
+void checkButtonState(ButtonConfig* button) {
+  if ((button->state == handledShort || button->state == handledLong) && digitalRead(button->pin) == HIGH) {
+    button->state = idl;
+    resetButtonToIdl(button);
+  } else if (button->state == idl) {
+    if (digitalRead(button->pin) == HIGH) { // Button has not pushed yet and is still idl
+      return;
+    } else {
+      button->state = pressed;
+      button->pressTime = millis();
+    }
+  } else if (button->state == pressed) {
+    if (digitalRead(button->pin) == HIGH) { // Button released
+      button->releaseTime = millis();
+      if (isLongPress(button->pressTime, button->releaseTime)) {
+        button->state = releasedLong;
+      } else {
+        button->state = releasedShort;
+      }
+    } else {
+      Serial.println("OK");
+      if (isLongPress(button->pressTime, millis())) {
+        button->state = releasedLong;
+      }
+      // Currently it is a short press but we do not know yet
+    }
   }
 }
 
@@ -216,17 +265,32 @@ void secondCoreTask( void * parameter) {
 
   while (true) {
 
-    if (isButtonSelected(BUTTON_ADD_PIN, BUTTON_ADD_INDEX)) {
+    checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX]);
+    checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX]);
+    checkButtonState(&buttonConfigs[BUTTON_A_INDEX]);
+    checkButtonState(&buttonConfigs[BUTTON_B_INDEX]);
+
+    if (buttonConfigs[BUTTON_ADD_INDEX].state == releasedShort) {
       spindleMmPerRound = min(spindleMmPerRound + 0.05, 5.0);
       preferences.putFloat("feed", spindleMmPerRound);
+      resetButtonToIdl(&buttonConfigs[BUTTON_ADD_INDEX]);
+    } else if (buttonConfigs[BUTTON_ADD_INDEX].state == releasedLong) {
+      backlashInSteps += 1;
+      preferences.putInt("backlash", backlashInSteps);
+      resetButtonToIdl(&buttonConfigs[BUTTON_ADD_INDEX]);
     }
 
-    if (isButtonSelected(BUTTON_REMOVE_PIN, BUTTON_REMOVE_INDEX)) {
+    if (buttonConfigs[BUTTON_REMOVE_INDEX].state == releasedShort) {
       spindleMmPerRound = max(spindleMmPerRound - 0.05, 0.05);
       preferences.putFloat("feed", spindleMmPerRound);
+      resetButtonToIdl(&buttonConfigs[BUTTON_REMOVE_INDEX]);
+    } else if (buttonConfigs[BUTTON_REMOVE_INDEX].state == releasedLong) {
+      backlashInSteps = max(0, backlashInSteps - 1);
+      preferences.putInt("backlash", backlashInSteps);
+      resetButtonToIdl(&buttonConfigs[BUTTON_REMOVE_INDEX]);
     }
 
-    if (isButtonSelected(BUTTON_A_PIN, BUTTON_A_INDEX)) {
+    if (buttonConfigs[BUTTON_A_INDEX].state == releasedShort) {
       if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
         waitToSyncSpindel = true;
@@ -234,11 +298,19 @@ void secondCoreTask( void * parameter) {
         stepperTarget = NAN;
         waitToSyncSpindel = false;
       }
+      resetButtonToIdl(&buttonConfigs[BUTTON_A_INDEX]);
+    } else if (buttonConfigs[BUTTON_A_INDEX].state == releasedLong) {
+      Serial.println("Long Press A");
+      resetButtonToIdl(&buttonConfigs[BUTTON_A_INDEX]);
     }
 
-    if (isButtonSelected(BUTTON_B_PIN, BUTTON_B_INDEX)) {
+    if (buttonConfigs[BUTTON_B_INDEX].state == releasedShort) {
       stepperTarget += stepperPosition;
       stepperPosition = 0.0f;
+      resetButtonToIdl(&buttonConfigs[BUTTON_B_INDEX]);
+    } else if (buttonConfigs[BUTTON_B_INDEX].state == releasedLong) {
+      Serial.println("Long Press B");
+      resetButtonToIdl(&buttonConfigs[BUTTON_B_INDEX]);
     }
 
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
@@ -255,13 +327,13 @@ void secondCoreTask( void * parameter) {
     display.setCursor(0,0);             // Start at top-left corner
     display.println("RPM " + String(rpm));
     display.setTextSize(1);             // Normal 1:1 pixel scale
-    display.println("FEED " + String(spindleMmPerRound));
-    display.println("DEG " + String(encoderDeg));
-    if (isnan(stepperTarget)) {
-      display.println("T -  P " + String(stepperPosition));
-    } else {
-      display.println("T " + String(stepperTarget) + "  P " + String(stepperPosition));
+    display.println("Feed " + String(spindleMmPerRound));
+    display.println("Degree " + String(encoderDeg));
+    if (!isnan(stepperTarget)) {
+      display.println("Target " + String(stepperTarget));
     }
+    display.println("Position " + String(stepperPosition));
+    display.println("Backlash " + String(backlashInSteps));
     display.display();
     delay(20);
   }
