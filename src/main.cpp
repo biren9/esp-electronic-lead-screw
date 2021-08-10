@@ -37,12 +37,20 @@
 #define BUTTON_JOG_LEFT_PIN 33
 #define BUTTON_JOG_RIGHT_PIN 35
 
-enum ButtonState { idl, pressed, releasedShort, releasedLong, handledShort, handledLong };
+enum ButtonState { readyToTrigger, pressedDown, recognizedShort, recognizedLong, handled, listenOnlyForLong };
 struct ButtonConfig { 
   int pin; 
   ButtonState state;
   int64_t pressTime;
   int64_t releaseTime;
+
+  void handled() {
+    this->state = ButtonState::handled;
+  }
+
+  void handledAndAcceptMoreLong() {
+    this->state = ButtonState::listenOnlyForLong;
+  }
 };
 
 enum JOGMode { left, neutral, right };
@@ -126,9 +134,9 @@ void startSingleStep(bool dir, bool isJog) {
   if (needBacklashCompensation) {
     for (int backlashStep = 1; backlashStep <= backlashInSteps; ++backlashStep) {
       digitalWrite(STEP_PIN, HIGH);
-      delayMicroseconds(500);
+      delayMicroseconds(50);
       digitalWrite(STEP_PIN, LOW);
-      delayMicroseconds(500);
+      delayMicroseconds(200);
     }
   }
 
@@ -158,54 +166,30 @@ void startSingleStep(bool dir, bool isJog) {
     hasJogPausedAtTarget = false;
   }
 
-    if (dir) {  // clockwise
-      if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
-        stepperPosition = stepperTarget;
-        return; // Target reached!
-      }
-      stepperPosition += (SPINDEL_THREAD_PITCH / MICROSTEPS_PER_REVOLUTION);
-    } else { // counterclockwise
-      if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
-        stepperPosition = stepperTarget;
-        return; // Target reached!
-      }
-      stepperPosition -= (SPINDEL_THREAD_PITCH / MICROSTEPS_PER_REVOLUTION);
+  if (dir) {  // clockwise
+    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
+      stepperPosition = stepperTarget;
+      return; // Target reached!
     }
+    stepperPosition += (SPINDEL_THREAD_PITCH / MICROSTEPS_PER_REVOLUTION);
+  } else { // counterclockwise
+    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
+      stepperPosition = stepperTarget;
+      return; // Target reached!
+    }
+    stepperPosition -= (SPINDEL_THREAD_PITCH / MICROSTEPS_PER_REVOLUTION);
+  }
 
-    digitalWrite(STEP_PIN, HIGH);
-    // Don't wait during the last step, it will pass by itself before we get back to stepping again.
-    // This condition is the reason moving left-right is limited to 600rpm but with ELS On and spindle
-    // gradually speeding up, stepper can go to ~1200rpm.
-    // if (i < steps - 1) {
-    //   Serial.println(stepDelayUs);
-    //   delayMicroseconds(stepDelayUs);
-    // }
-  // }
+  digitalWrite(STEP_PIN, HIGH);
   directionChanged = false;
 }
 
 ButtonConfig buttonConfigs[4] = {
-  ButtonConfig{BUTTON_ADD_PIN, idl, 0, 0},
-  ButtonConfig{BUTTON_REMOVE_PIN, idl, 0, 0},
-  ButtonConfig{BUTTON_A_PIN, idl, 0, 0},
-  ButtonConfig{BUTTON_B_PIN, idl, 0, 0}
+  ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_A_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_B_PIN, readyToTrigger, 0, 0}
 };
-
-void resetButtonToIdl(ButtonConfig* button) {
-  if (button->state == releasedLong) {
-    button->state = handledLong;
-    button->pressTime = button->releaseTime;
-    button->releaseTime = 0;
-  } else if (button->state == releasedShort) {
-    button->state = handledShort;
-    button->pressTime = 0;
-    button->releaseTime = 0;
-  } else {
-    button->state = idl;
-    button->pressTime = 0;
-    button->releaseTime = 0;
-  }
-}
 
 bool isLongPress(int64_t start, int64_t end) {
   if (end - start >= 500) {
@@ -214,34 +198,45 @@ bool isLongPress(int64_t start, int64_t end) {
   return false;
 }
 
+void markButtonAsLongPress(ButtonConfig* button) {
+  button->state = recognizedLong;
+  button->pressTime = millis();
+  button->releaseTime = 0;
+}
+
 // TODO multiple long press detection not working?
-void checkButtonState(ButtonConfig* button) {
-  if ((button->state == handledShort || button->state == handledLong) && digitalRead(button->pin) == HIGH) {
-    button->state = idl;
-    resetButtonToIdl(button);
-  } else if (button->state == idl) {
-    if (digitalRead(button->pin) == HIGH) { // Button has not pushed yet and is still idl
-      return;
+ButtonState checkButtonState(ButtonConfig* button) {
+  if (button->state == listenOnlyForLong) {
+    if (digitalRead(button->pin) == HIGH) {
+      button->state = handled;
     } else {
-      button->state = pressed;
+      if (isLongPress(button->pressTime, millis())) {
+        markButtonAsLongPress(button);
+      }
+    }
+  } else if (button->state == handled && digitalRead(button->pin) == HIGH) {
+    button->state = readyToTrigger;
+  } else if (button->state == readyToTrigger) {
+    if (digitalRead(button->pin) == LOW) {
+      button->state = pressedDown;
       button->pressTime = millis();
     }
-  } else if (button->state == pressed) {
+  } else if (button->state == pressedDown) {
     if (digitalRead(button->pin) == HIGH) { // Button released
       button->releaseTime = millis();
       if (isLongPress(button->pressTime, button->releaseTime)) {
-        button->state = releasedLong;
+        markButtonAsLongPress(button);
       } else {
-        button->state = releasedShort;
+        button->state = recognizedShort;
       }
     } else {
-      Serial.println("OK");
       if (isLongPress(button->pressTime, millis())) {
-        button->state = releasedLong;
+        markButtonAsLongPress(button);
       }
-      // Currently it is a short press but we do not know yet
+      // else: Currently it is a short press but we do not know yet
     }
   }
+  return button->state;
 }
 
 void secondCoreTask( void * parameter) {
@@ -265,32 +260,43 @@ void secondCoreTask( void * parameter) {
 
   while (true) {
 
-    checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX]);
-    checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX]);
-    checkButtonState(&buttonConfigs[BUTTON_A_INDEX]);
-    checkButtonState(&buttonConfigs[BUTTON_B_INDEX]);
-
-    if (buttonConfigs[BUTTON_ADD_INDEX].state == releasedShort) {
-      spindleMmPerRound = min(spindleMmPerRound + 0.05, 5.0);
-      preferences.putFloat("feed", spindleMmPerRound);
-      resetButtonToIdl(&buttonConfigs[BUTTON_ADD_INDEX]);
-    } else if (buttonConfigs[BUTTON_ADD_INDEX].state == releasedLong) {
+    switch (checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
+    case recognizedLong:
       backlashInSteps += 1;
       preferences.putInt("backlash", backlashInSteps);
-      resetButtonToIdl(&buttonConfigs[BUTTON_ADD_INDEX]);
+      buttonConfigs[BUTTON_ADD_INDEX].handledAndAcceptMoreLong();
+      break;
+    case recognizedShort:
+      spindleMmPerRound = min(spindleMmPerRound + 0.05, 5.0);
+      preferences.putFloat("feed", spindleMmPerRound);
+      buttonConfigs[BUTTON_ADD_INDEX].handled();
+      break;
+    default:
+      break;
     }
 
-    if (buttonConfigs[BUTTON_REMOVE_INDEX].state == releasedShort) {
-      spindleMmPerRound = max(spindleMmPerRound - 0.05, 0.05);
-      preferences.putFloat("feed", spindleMmPerRound);
-      resetButtonToIdl(&buttonConfigs[BUTTON_REMOVE_INDEX]);
-    } else if (buttonConfigs[BUTTON_REMOVE_INDEX].state == releasedLong) {
+    switch (checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
+    case recognizedLong:
       backlashInSteps = max(0, backlashInSteps - 1);
       preferences.putInt("backlash", backlashInSteps);
-      resetButtonToIdl(&buttonConfigs[BUTTON_REMOVE_INDEX]);
+      buttonConfigs[BUTTON_REMOVE_INDEX].handledAndAcceptMoreLong();
+      break;
+    case recognizedShort:
+      spindleMmPerRound = max(spindleMmPerRound - 0.05, 0.05);
+      preferences.putFloat("feed", spindleMmPerRound);
+      buttonConfigs[BUTTON_REMOVE_INDEX].handled();
+      break;
+    default:
+      break;
     }
 
-    if (buttonConfigs[BUTTON_A_INDEX].state == releasedShort) {
+
+     switch (checkButtonState(&buttonConfigs[BUTTON_A_INDEX])) {
+    case recognizedLong:
+      Serial.println("Long Press A");
+      buttonConfigs[BUTTON_A_INDEX].handled();
+      break;
+    case recognizedShort:
       if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
         waitToSyncSpindel = true;
@@ -298,19 +304,24 @@ void secondCoreTask( void * parameter) {
         stepperTarget = NAN;
         waitToSyncSpindel = false;
       }
-      resetButtonToIdl(&buttonConfigs[BUTTON_A_INDEX]);
-    } else if (buttonConfigs[BUTTON_A_INDEX].state == releasedLong) {
-      Serial.println("Long Press A");
-      resetButtonToIdl(&buttonConfigs[BUTTON_A_INDEX]);
+      buttonConfigs[BUTTON_A_INDEX].handled();
+      break;
+    default:
+      break;
     }
 
-    if (buttonConfigs[BUTTON_B_INDEX].state == releasedShort) {
+    switch (checkButtonState(&buttonConfigs[BUTTON_B_INDEX])) {
+    case recognizedLong:
+      Serial.println("Long Press B");
+      buttonConfigs[BUTTON_B_INDEX].handled();
+      break;
+    case recognizedShort:
       stepperTarget += stepperPosition;
       stepperPosition = 0.0f;
-      resetButtonToIdl(&buttonConfigs[BUTTON_B_INDEX]);
-    } else if (buttonConfigs[BUTTON_B_INDEX].state == releasedLong) {
-      Serial.println("Long Press B");
-      resetButtonToIdl(&buttonConfigs[BUTTON_B_INDEX]);
+      buttonConfigs[BUTTON_B_INDEX].handled();
+      break;
+    default:
+      break;
     }
 
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
