@@ -97,6 +97,7 @@ int64_t encoderCalcBase = 0;
 int backlashInSteps = 20;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
+bool isSpindelEnabled = false;
 
 // Degree calculation
 int64_t encoderAbs=0;
@@ -160,11 +161,14 @@ void startSingleStep(bool dir, bool isJog) {
       waitToSyncSpindel = false;
       // Spindel in sync
     } else {
-      Serial.println(encoderDeg);
       return;
     }
   } else if (isJog && !isnan(stepperTarget) && !hasJogPausedAtTarget) {
     if (abs(stepperTarget - stepperPosition) <= threshold) {
+      hasJogPausedAtTarget = true;
+      disableJogUntil = millis() + 500;
+      return;
+    } else if (abs(stepperPosition) <= threshold) {
       hasJogPausedAtTarget = true;
       disableJogUntil = millis() + 500;
       return;
@@ -181,13 +185,15 @@ void startSingleStep(bool dir, bool isJog) {
 
   if (dir) {  // clockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
-      stepperPosition = stepperTarget;
+      Serial.println("Target reached");
+      isSpindelEnabled = false;
       return; // Target reached!
     }
     stepperPosition += ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
-      stepperPosition = stepperTarget;
+      Serial.println("Target reached");
+      isSpindelEnabled = false;
       return; // Target reached!
     }
     stepperPosition -= ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
@@ -299,11 +305,7 @@ void secondCoreTask( void * parameter) {
 
      switch (checkButtonState(&buttonConfigs[BUTTON_A_INDEX])) {
     case recognizedLong:
-      Serial.println("Long Press A");
-      buttonConfigs[BUTTON_A_INDEX].handled();
-      break;
-    case recognizedShort:
-      if (isnan(stepperTarget)) {
+    if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
         waitToSyncSpindel = true;
       } else {
@@ -312,18 +314,23 @@ void secondCoreTask( void * parameter) {
       }
       buttonConfigs[BUTTON_A_INDEX].handled();
       break;
+    case recognizedShort:
+      isSpindelEnabled = !isSpindelEnabled;
+      buttonConfigs[BUTTON_A_INDEX].handled();
+      break;
     default:
       break;
     }
 
     switch (checkButtonState(&buttonConfigs[BUTTON_B_INDEX])) {
     case recognizedLong:
-      Serial.println("Long Press B");
-      buttonConfigs[BUTTON_B_INDEX].handled();
-      break;
-    case recognizedShort:
       stepperTarget += stepperPosition;
       stepperPosition = 0.0f;
+      buttonConfigs[BUTTON_B_INDEX].handled();
+      
+      break;
+    case recognizedShort:
+      Serial.println("Short Press B");
       buttonConfigs[BUTTON_B_INDEX].handled();
       break;
     default:
@@ -335,11 +342,13 @@ void secondCoreTask( void * parameter) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = left;
       }
+      isSpindelEnabled = false;
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
       if (currentJogMode != right) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
+      isSpindelEnabled = false;
     } else {
        currentJogMode = neutral;
        jogCurrentSpeedMultiplier = 1.0f;
@@ -438,18 +447,20 @@ void loop() {
         encoderLastSteps -= encoderStepsPerStepperStep;
       }
 
-      startSingleStep(direction, false);
-      stepPinIsOn = true;
-      lastStepTime = micros();
-  }
+      if (isSpindelEnabled) {
+        startSingleStep(direction, false);
+        stepPinIsOn = true;
+        lastStepTime = micros();
+      }
+    }
   
-  if (micros() - lastStepTime >= 10 && stepPinIsOn) {
-      endSingleStep();
-      stepPinIsOn = false;
+    if (micros() - lastStepTime >= 10 && stepPinIsOn) {
+        endSingleStep();
+        stepPinIsOn = false;
+    }
   }
-}
 
-// Drehzahl berechnen
+  // Drehzahl berechnen
   if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
     rpm = (abs(encoderAct - encoderLastUpm) * 60000 / (millis() - rpmMillisTemp)) / (ENCODER_PULS_PER_REVOLUTION * 4);
     encoderLastUpm = encoderAct;
