@@ -98,6 +98,7 @@ int backlashInSteps = 20;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
 bool isSpindelEnabled = false;
+bool autoMoveToZero = false;
 
 // Degree calculation
 int64_t encoderAbs=0;
@@ -330,7 +331,7 @@ void secondCoreTask( void * parameter) {
       
       break;
     case recognizedShort:
-      Serial.println("Short Press B");
+      autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_B_INDEX].handled();
       break;
     default:
@@ -425,7 +426,19 @@ void loop() {
   int encoderActDifference = encoderAct - encoderLastSteps;
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
 
-  if (currentJogMode != neutral) {
+
+  if (autoMoveToZero) {
+    float multiplier = 1;
+    while (abs(stepperPosition) >= 0.001) {
+      bool direction = stepperPosition > 0 ? false : true;
+      startSingleStep(direction, true);
+      delayMicroseconds(20000/multiplier);
+      digitalWrite(STEP_PIN, LOW);
+      delayMicroseconds(20000/multiplier);
+      multiplier = min(multiplier + 0.2f, 100.0f);
+    }
+    autoMoveToZero = false;
+  } else if (currentJogMode != neutral) {
     if (currentJogMode == left) {
       startSingleStep(true, true);
     } else {
@@ -439,6 +452,7 @@ void loop() {
   } else {
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
       int encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+      Serial.println((ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))));
       bool direction = stepsToDo > 0;
 
       if (direction) {
