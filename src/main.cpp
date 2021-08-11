@@ -17,7 +17,7 @@
 
 #define DIR_PIN 4
 #define STEP_PIN 2
-#define STEPPER_GEAR_RATIO 1.0f/2.0f
+#define STEPPER_GEAR_RATIO 0.5f
 #define MICROSTEPS_PER_REVOLUTION 400
 #define SPINDEL_THREAD_PITCH 1.5f // value in mm
 
@@ -53,9 +53,18 @@ struct ButtonConfig {
   }
 };
 
+ButtonConfig buttonConfigs[4] = {
+  ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_A_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_B_PIN, readyToTrigger, 0, 0}
+};
+
 enum JOGMode { left, neutral, right };
 JOGMode currentJogMode = neutral;
 int64_t disableJogUntil = 0;
+float jogMaxSpeedMultiplier = 100.0f;
+float jogCurrentSpeedMultiplier = 1.0f;
 bool hasJogPausedAtTarget = false;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -82,11 +91,12 @@ bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
 float stepperTarget = NAN; // in mm
 bool waitToSyncSpindel = false;
-int64_t lastStepTime = 0;
-int64_t stepPinIsOn = false;
+unsigned long lastStepTime = 0;
+bool stepPinIsOn = false;
 int64_t encoderCalcBase = 0;
 int backlashInSteps = 20;
-bool stepDelayDirection = true; // To reset stepDelayUs when direction changes.
+bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
+float stepsToDoLater = 0.0f;
 
 // Degree calculation
 int64_t encoderAbs=0;
@@ -125,6 +135,7 @@ void startSingleStep(bool dir, bool isJog) {
     // stepDelayUs = PULSE_MAX_US;
     stepDelayDirection = dir;
     digitalWrite(DIR_PIN, dir ? HIGH : LOW);
+    delayMicroseconds(10); // Need for changing Direction
     Serial.println("Direction change");
     directionChanged = true;
     needBacklashCompensation = true;
@@ -134,9 +145,9 @@ void startSingleStep(bool dir, bool isJog) {
   if (needBacklashCompensation) {
     for (int backlashStep = 1; backlashStep <= backlashInSteps; ++backlashStep) {
       digitalWrite(STEP_PIN, HIGH);
-      delayMicroseconds(50);
+      delayMicroseconds(100);
       digitalWrite(STEP_PIN, LOW);
-      delayMicroseconds(200);
+      delayMicroseconds(400);
     }
   }
 
@@ -160,10 +171,12 @@ void startSingleStep(bool dir, bool isJog) {
     }
   }
 
-  if (disableJogUntil > millis()) {
-    return; // Jog has to pause
-  } else {
-    hasJogPausedAtTarget = false;
+  if (isJog) {
+    if (disableJogUntil > millis()) {
+      return; // Jog has to pause
+    } else {
+      hasJogPausedAtTarget = false;
+    }
   }
 
   if (dir) {  // clockwise
@@ -171,25 +184,18 @@ void startSingleStep(bool dir, bool isJog) {
       stepperPosition = stepperTarget;
       return; // Target reached!
     }
-    stepperPosition += (SPINDEL_THREAD_PITCH / MICROSTEPS_PER_REVOLUTION);
+    stepperPosition += ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
       stepperPosition = stepperTarget;
       return; // Target reached!
     }
-    stepperPosition -= (SPINDEL_THREAD_PITCH / MICROSTEPS_PER_REVOLUTION);
+    stepperPosition -= ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
   }
 
   digitalWrite(STEP_PIN, HIGH);
   directionChanged = false;
 }
-
-ButtonConfig buttonConfigs[4] = {
-  ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_A_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_B_PIN, readyToTrigger, 0, 0}
-};
 
 bool isLongPress(int64_t start, int64_t end) {
   if (end - start >= 500) {
@@ -325,11 +331,18 @@ void secondCoreTask( void * parameter) {
     }
 
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
-      currentJogMode = left;
+      if (currentJogMode != left) {
+        jogCurrentSpeedMultiplier = 1.0f;
+        currentJogMode = left;
+      }
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
-      currentJogMode = right;
+      if (currentJogMode != right) {
+        jogCurrentSpeedMultiplier = 1.0f;
+        currentJogMode = right;
+      }
     } else {
        currentJogMode = neutral;
+       jogCurrentSpeedMultiplier = 1.0f;
     }
   
     display.clearDisplay();
@@ -359,6 +372,8 @@ void setup() {
 
   pinMode(DIR_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
+
+  stepDelayDirection = digitalRead(DIR_PIN);
 
   xTaskCreatePinnedToCore(
     secondCoreTask, /* Function to implement the task */
@@ -395,38 +410,44 @@ void loop() {
   maxRpm = (motorMaxSpeed * 60) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200);
 
   // Stepperschritte pro Drehzahlencoder Schritt berechnen
-  stepperStepsPerEncoderSteps = (spindleMmPerRound / ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION)) / (ENCODER_PULS_PER_REVOLUTION * 4);
+  stepperStepsPerEncoderSteps = ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
 
   //Motor steuern
   int encoderActDifference = encoderAct - encoderLastSteps;
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
-  if (rpm == 0 && currentJogMode != neutral) {
+
+  if (currentJogMode != neutral) {
     if (currentJogMode == left) {
       startSingleStep(true, true);
     } else {
       startSingleStep(false, true);
     }
-    delayMicroseconds(500*2);
+
+    delayMicroseconds(20000/jogCurrentSpeedMultiplier);
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(500*2);
-  } else if (abs(stepsToDo) >= 1) {
+    delayMicroseconds(20000/jogCurrentSpeedMultiplier);
+    jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + 0.05f, jogMaxSpeedMultiplier);
+  } else {
+    if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
+      int encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+      bool direction = stepsToDo > 0;
 
-    if (abs(stepsToDo) >= 2) {
-      Serial.println("!!!!! more than one Step to do !!!!!");
-    }
+      if (direction) {
+        encoderLastSteps += encoderStepsPerStepperStep;
+      } else {
+        encoderLastSteps -= encoderStepsPerStepperStep;
+      }
 
-    encoderLastSteps = encoderAct;
-    bool direction = stepsToDo > 0;
-    startSingleStep(direction, false);
-    stepPinIsOn = true;
-    lastStepTime = micros();
-  } else if (abs((float)encoderActDifference * stepperStepsPerEncoderSteps) >= 0.5 && stepPinIsOn) {
-      endSingleStep();
-      stepPinIsOn = false;
-  } else if (lastStepTime >= 20 && stepPinIsOn) {
+      startSingleStep(direction, false);
+      stepPinIsOn = true;
+      lastStepTime = micros();
+  }
+  
+  if (micros() - lastStepTime >= 10 && stepPinIsOn) {
       endSingleStep();
       stepPinIsOn = false;
   }
+}
 
 // Drehzahl berechnen
   if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
