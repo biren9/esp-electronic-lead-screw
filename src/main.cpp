@@ -17,9 +17,12 @@
 
 #define DIR_PIN 4
 #define STEP_PIN 2
-#define STEPPER_GEAR_RATIO 0.5f
+#define STEPPER_GEAR_RATIO 0.5f // example: 20 teath on stepper & 40 teeth on spindel is a 1/2 gear ratio
 #define MICROSTEPS_PER_REVOLUTION 400
 #define SPINDEL_THREAD_PITCH 1.5f // value in mm
+#define MINIMUM_STEP_PULS_WIDTH 4 // in µs
+#define THRESHOLD 0.001f
+#define MAX_MOTOR_SPEED 1200 // Höchstgeschwindigkeit
 
 // Buttons
 #define BUTTON_ADD_PIN 23
@@ -79,13 +82,12 @@ int64_t encoderLastSteps = 0; // Tempvariable für encoderDoSteps
 float encoderLastStepsFrac = 0; // Tempvariable für encoderDoSteps
 
 // RPM
-int     rpm = 0; // Umdrehung pro Minute
-int     rpmMillisMeasure = 500; // Messzeit für UPM in Millisekunden
-int     rpmMillisTemp = 0; // Tempspeicher für millis
-int64_t maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
+int rpm = 0; // Umdrehung pro Minute
+int rpmMillisMeasure = 500; // Messzeit für UPM in Millisekunden
+int rpmMillisTemp = 0; // Tempspeicher für millis
+int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
-int motorMaxSpeed = 2500; // Höchstgeschwindigkeit
 float spindleMmPerRound = 1.5f; // Leitspindelweg pro umdrehung in mm aka feed
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
@@ -94,7 +96,6 @@ float stepperTarget = NAN; // in mm
 bool waitToSyncSpindel = false;
 unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
-int64_t encoderCalcBase = 0;
 int backlashInSteps = 20;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
@@ -105,7 +106,6 @@ bool autoMoveToZero = false;
 int64_t encoderAbs=0;
 bool zeroDeg=false; // wird auf true gesetzt wenn 0° Punkt erreicht
 bool dispZeroDeg=false;
-bool encoderDirection = false;
 float encoderDeg = 0; // Winkel des encoders;
 
 void writeToDisplay(String text) {
@@ -131,7 +131,6 @@ void endSingleStep() {
 
 // Moves the stepper.
 void startSingleStep(bool dir, bool isJog) {
-  float threshold = 0.001;
   bool needBacklashCompensation = false;
   // Start slow if direction changed.
   if (stepDelayDirection != dir) {
@@ -166,11 +165,11 @@ void startSingleStep(bool dir, bool isJog) {
       return;
     }
   } else if (isJog && !isnan(stepperTarget) && !hasJogPausedAtTarget) {
-    if (abs(stepperTarget - stepperPosition) <= threshold) {
+    if (abs(stepperTarget - stepperPosition) <= THRESHOLD) {
       hasJogPausedAtTarget = true;
       disableJogUntil = millis() + 500;
       return;
-    } else if (abs(stepperPosition) <= threshold) {
+    } else if (abs(stepperPosition) <= THRESHOLD) {
       hasJogPausedAtTarget = true;
       disableJogUntil = millis() + 500;
       return;
@@ -186,14 +185,14 @@ void startSingleStep(bool dir, bool isJog) {
   }
 
   if (dir) {  // clockwise
-    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
+    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
       isSpindelEnabled = false;
       return; // Target reached!
     }
     stepperPosition += ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
   } else { // counterclockwise
-    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= threshold) && !directionChanged && !isJog) {
+    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
       isSpindelEnabled = false;
       return; // Target reached!
@@ -281,7 +280,7 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_ADD_INDEX].handledAndAcceptMoreLong();
       break;
     case recognizedShort:
-      spindleMmPerRound = min(spindleMmPerRound + 0.05, 5.0);
+      spindleMmPerRound = min(spindleMmPerRound + 0.05f, 3.0f);
       preferences.putFloat("feed", spindleMmPerRound);
       buttonConfigs[BUTTON_ADD_INDEX].handled();
       break;
@@ -296,7 +295,7 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_REMOVE_INDEX].handledAndAcceptMoreLong();
       break;
     case recognizedShort:
-      spindleMmPerRound = max(spindleMmPerRound - 0.05, 0.05);
+      spindleMmPerRound = max(spindleMmPerRound - 0.05f, 0.05f);
       preferences.putFloat("feed", spindleMmPerRound);
       buttonConfigs[BUTTON_REMOVE_INDEX].handled();
       break;
@@ -362,7 +361,8 @@ void secondCoreTask( void * parameter) {
     display.setCursor(0,0);             // Start at top-left corner
     display.println("RPM " + String(rpm));
     display.setTextSize(1);             // Normal 1:1 pixel scale
-    display.println("Feed " + String(spindleMmPerRound));
+    display.println("Max " + String(maxRpm));
+    display.println("Feed " + String(spindleMmPerRound) + " " + isSpindelEnabled ? "ON" : "OFF");
     display.println("Degree " + String(encoderDeg));
     if (!isnan(stepperTarget)) {
       display.println("Target " + String(stepperTarget));
@@ -396,43 +396,41 @@ void setup() {
     0); /* Core where the task should run */
 }
 
-
-// CAn be removed?
-int64_t getEncoderCount() {
-  if (encoderDirection == false) {
-    return encoderCalcBase + encoder.getCount();
-  } else {
-    return encoderCalcBase - encoder.getCount();
-  }
-}
-void setEncoderDirection(bool dir) {
-  encoderCalcBase = encoder.getCount();
-  encoder.setCount(0);
-  encoderLastSteps = encoderCalcBase;
-  encoderDirection = dir;
-}
-
 void loop() {
-
-  // Serial.println(maxUpm);
-
-  // Aktuelle Drehzahlencoder Position
-  encoderAct = getEncoderCount();
+  // Curent encoder position
+  encoderAct = encoder.getCount();
 
   // max RPM calculation
-  maxRpm = (motorMaxSpeed * 60) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200);
+  maxRpm = (MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200);
 
   // Stepperschritte pro Drehzahlencoder Schritt berechnen
   stepperStepsPerEncoderSteps = ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
 
-  //Motor steuern
+  // calculate rpm
+  if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
+    rpm = (abs(encoderAct - encoderLastUpm) * 60000 / (millis() - rpmMillisTemp)) / (ENCODER_PULS_PER_REVOLUTION * 4);
+    encoderLastUpm = encoderAct;
+    rpmMillisTemp = rpmMillisTemp + rpmMillisMeasure;
+
+    // Stop the spindel if we are running to fast.
+    if (rpm > maxRpm) {
+      isSpindelEnabled = false;
+    }
+  }
+
+  // calculate degrees
+  encoderDeg = float(encoderAct % (ENCODER_PULS_PER_REVOLUTION * 4)) * 360 / (ENCODER_PULS_PER_REVOLUTION * 4);
+  if (encoderDeg < 0) {
+    encoderDeg = 360 + encoderDeg;
+  }
+
+  // Drive the motor
   int encoderActDifference = encoderAct - encoderLastSteps;
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
 
-
   if (autoMoveToZero) {
     float multiplier = 1;
-    while (abs(stepperPosition) >= 0.001 && autoMoveToZero) {
+    while (abs(stepperPosition) >= THRESHOLD && autoMoveToZero) {
       bool direction = stepperPosition > 0 ? false : true;
       startSingleStep(direction, true);
       delayMicroseconds(20000/multiplier);
@@ -476,22 +474,9 @@ void loop() {
       }
     }
   
-    if (micros() - lastStepTime >= 10 && stepPinIsOn) {
+    if (micros() - lastStepTime >= MINIMUM_STEP_PULS_WIDTH && stepPinIsOn) {
         endSingleStep();
         stepPinIsOn = false;
     }
-  }
-
-  // Drehzahl berechnen
-  if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
-    rpm = (abs(encoderAct - encoderLastUpm) * 60000 / (millis() - rpmMillisTemp)) / (ENCODER_PULS_PER_REVOLUTION * 4);
-    encoderLastUpm = encoderAct;
-    rpmMillisTemp = rpmMillisTemp + rpmMillisMeasure;
-  }
-
-    // Winkel berechnen
-  encoderDeg = float(encoderAct % (ENCODER_PULS_PER_REVOLUTION * 4)) * 360 / (ENCODER_PULS_PER_REVOLUTION * 4);
-  if (encoderDeg < 0) {
-    encoderDeg = 360 + encoderDeg;
   }
 }
