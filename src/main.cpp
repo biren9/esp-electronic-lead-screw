@@ -31,11 +31,11 @@
 #define BUTTON_REMOVE_PIN 18
 #define BUTTON_REMOVE_INDEX 1
 
-#define BUTTON_A_PIN 13
-#define BUTTON_A_INDEX 2
+#define BUTTON_TARGET_PIN 13
+#define BUTTON_TARGET_INDEX 2
 
-#define BUTTON_B_PIN 17
-#define BUTTON_B_INDEX 3
+#define BUTTON_POSITION_PIN 17
+#define BUTTON_POSITION_INDEX 3
 
 #define BUTTON_JOG_LEFT_PIN 33
 #define BUTTON_JOG_RIGHT_PIN 35
@@ -59,8 +59,8 @@ struct ButtonConfig {
 ButtonConfig buttonConfigs[4] = {
   ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
   ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_A_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_B_PIN, readyToTrigger, 0, 0}
+  ButtonConfig{BUTTON_TARGET_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0}
 };
 
 enum JOGMode { left, neutral, right };
@@ -264,8 +264,8 @@ void secondCoreTask( void * parameter) {
 
   pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
   pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_A_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_B_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_TARGET_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_POSITION_PIN, INPUT_PULLUP);
   pinMode(BUTTON_JOG_LEFT_PIN, INPUT_PULLUP);
   pinMode(BUTTON_JOG_RIGHT_PIN, INPUT_PULLUP);
 
@@ -304,7 +304,7 @@ void secondCoreTask( void * parameter) {
     }
 
 
-     switch (checkButtonState(&buttonConfigs[BUTTON_A_INDEX])) {
+     switch (checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
     case recognizedLong:
     if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
@@ -313,26 +313,26 @@ void secondCoreTask( void * parameter) {
         stepperTarget = NAN;
         waitToSyncSpindel = false;
       }
-      buttonConfigs[BUTTON_A_INDEX].handled();
+      buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     case recognizedShort:
       isSpindelEnabled = !isSpindelEnabled;
-      buttonConfigs[BUTTON_A_INDEX].handled();
+      buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     default:
       break;
     }
 
-    switch (checkButtonState(&buttonConfigs[BUTTON_B_INDEX])) {
+    switch (checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
     case recognizedLong:
       stepperTarget += stepperPosition;
       stepperPosition = 0.0f;
-      buttonConfigs[BUTTON_B_INDEX].handled();
+      buttonConfigs[BUTTON_POSITION_INDEX].handled();
       
       break;
     case recognizedShort:
       autoMoveToZero = !autoMoveToZero;
-      buttonConfigs[BUTTON_B_INDEX].handled();
+      buttonConfigs[BUTTON_POSITION_INDEX].handled();
       break;
     default:
       break;
