@@ -76,6 +76,7 @@ ESP32Encoder encoder;
 int64_t encoderLastUpm = 0;     // letzte Position des Encoders (UPM) in Steps *4 (Quad)
 int64_t encoderAct = 0;      // aktue Position des Encoders in Steps *4 (Quad)
 int64_t encoderLastSteps = 0; // Tempvariable für encoderDoSteps
+float encoderLastStepsFrac = 0; // Tempvariable für encoderDoSteps
 
 // RPM
 int     rpm = 0; // Umdrehung pro Minute
@@ -395,6 +396,8 @@ void setup() {
     0); /* Core where the task should run */
 }
 
+
+// CAn be removed?
 int64_t getEncoderCount() {
   if (encoderDirection == false) {
     return encoderCalcBase + encoder.getCount();
@@ -429,7 +432,7 @@ void loop() {
 
   if (autoMoveToZero) {
     float multiplier = 1;
-    while (abs(stepperPosition) >= 0.001) {
+    while (abs(stepperPosition) >= 0.001 && autoMoveToZero) {
       bool direction = stepperPosition > 0 ? false : true;
       startSingleStep(direction, true);
       delayMicroseconds(20000/multiplier);
@@ -451,14 +454,19 @@ void loop() {
     jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + 0.05f, jogMaxSpeedMultiplier);
   } else {
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
-      int encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
-      Serial.println((ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))));
+      float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+      float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
+      int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
       bool direction = stepsToDo > 0;
 
       if (direction) {
-        encoderLastSteps += encoderStepsPerStepperStep;
+        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
+        encoderLastSteps += encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
+        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
       } else {
-        encoderLastSteps -= encoderStepsPerStepperStep;
+        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
+        encoderLastSteps -= encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
+        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
       }
 
       if (isSpindelEnabled) {
