@@ -158,7 +158,7 @@ void startSingleStep(bool dir, bool isJog) {
   }
 
   if (waitToSyncSpindel && !isJog) {
-    if (encoderDeg <= 1) {
+    if (encoderDeg >= 359.5f && encoderDeg <= 0.5f) {
       waitToSyncSpindel = false;
       // Spindel in sync
     } else {
@@ -362,7 +362,19 @@ void secondCoreTask( void * parameter) {
     display.println("RPM " + String(rpm));
     display.setTextSize(1);             // Normal 1:1 pixel scale
     display.println("Max " + String(maxRpm));
-    display.println("Feed " + String(spindleMmPerRound) + " " + isSpindelEnabled ? "ON" : "OFF");
+
+    String spindelState;
+    if (isSpindelEnabled) {
+      if (waitToSyncSpindel) {
+        spindelState = "Syncing";
+      } else {
+        spindelState = "On";
+      }
+    } else {
+      spindelState = "Off";
+    }
+
+    display.println("Feed " + String(spindleMmPerRound) + " " + spindelState);
     display.println("Degree " + String(encoderDeg));
     if (!isnan(stepperTarget)) {
       display.println("Target " + String(stepperTarget));
