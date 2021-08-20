@@ -23,7 +23,6 @@
 #define MINIMUM_STEP_PULS_WIDTH 4 // in µs
 #define THRESHOLD 0.001f
 #define MAX_MOTOR_SPEED 1200 // Höchstgeschwindigkeit
-#define SINGLE_STEP ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION)
 
 // Buttons
 #define BUTTON_ADD_PIN 23
@@ -99,6 +98,7 @@ unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
 int backlashInSteps = 20;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
+float stepsToDoLater = 0.0f;
 bool isSpindelEnabled = false;
 bool autoMoveToZero = false;
 
@@ -123,22 +123,6 @@ void IRAM_ATTR encoderISR() {
     zeroDeg=true;
     dispZeroDeg=true;
   }
-}
-
-void setSpindleInWaitForSyncIfNeeded() {
-  if(!isnan(stepperTarget)) {
-    Serial.println("Wait for spindel to sync");
-    waitToSyncSpindel = true;
-  }
-}
-
-void enableSpindel() {
-  setSpindleInWaitForSyncIfNeeded();
-  isSpindelEnabled = true;
-}
-
-void disableSpindel() {
-  isSpindelEnabled = false;
 }
 
 void endSingleStep() {
@@ -169,12 +153,12 @@ void startSingleStep(bool dir, bool isJog) {
     }
   }
 
-  if (directionChanged) {
-    setSpindleInWaitForSyncIfNeeded();
+  if (directionChanged && !isnan(stepperTarget)) {
+    waitToSyncSpindel = true;
   }
 
   if (waitToSyncSpindel && !isJog) {
-    if ((int)encoderDeg == 0) {
+    if (encoderDeg >= 359.5f && encoderDeg <= 0.5f) {
       waitToSyncSpindel = false;
       // Spindel in sync
     } else {
@@ -203,17 +187,17 @@ void startSingleStep(bool dir, bool isJog) {
   if (dir) {  // clockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
-      disableSpindel();
+      isSpindelEnabled = false;
       return; // Target reached!
     }
-    stepperPosition += SINGLE_STEP;
+    stepperPosition += ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
-      disableSpindel();
+      isSpindelEnabled = false;
       return; // Target reached!
     }
-    stepperPosition -= SINGLE_STEP;
+    stepperPosition -= ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
   }
 
   digitalWrite(STEP_PIN, HIGH);
@@ -324,7 +308,7 @@ void secondCoreTask( void * parameter) {
     case recognizedLong:
     if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
-        setSpindleInWaitForSyncIfNeeded();
+        waitToSyncSpindel = true;
       } else {
         stepperTarget = NAN;
         waitToSyncSpindel = false;
@@ -332,11 +316,7 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     case recognizedShort:
-      if(isSpindelEnabled) {
-        disableSpindel();
-      } else {
-        enableSpindel();
-      }
+      isSpindelEnabled = !isSpindelEnabled;
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     default:
@@ -351,7 +331,6 @@ void secondCoreTask( void * parameter) {
       
       break;
     case recognizedShort:
-      disableSpindel();
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       break;
@@ -364,13 +343,13 @@ void secondCoreTask( void * parameter) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = left;
       }
-      disableSpindel();
+      isSpindelEnabled = false;
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
       if (currentJogMode != right) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
-      disableSpindel();
+      isSpindelEnabled = false;
     } else {
        currentJogMode = neutral;
        jogCurrentSpeedMultiplier = 1.0f;
