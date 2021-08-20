@@ -23,6 +23,7 @@
 #define MINIMUM_STEP_PULS_WIDTH 4 // in µs
 #define THRESHOLD 0.001f
 #define MAX_MOTOR_SPEED 1200 // Höchstgeschwindigkeit
+#define SINGLE_STEP ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION)
 
 // Buttons
 #define BUTTON_ADD_PIN 23
@@ -158,7 +159,7 @@ void startSingleStep(bool dir, bool isJog) {
   }
 
   if (waitToSyncSpindel && !isJog) {
-    if (encoderDeg >= 359.5f && encoderDeg <= 0.5f) {
+    if ((int)encoderDeg == 0) {
       waitToSyncSpindel = false;
       // Spindel in sync
     } else {
@@ -190,14 +191,14 @@ void startSingleStep(bool dir, bool isJog) {
       isSpindelEnabled = false;
       return; // Target reached!
     }
-    stepperPosition += ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
+    stepperPosition += SINGLE_STEP;
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
       isSpindelEnabled = false;
       return; // Target reached!
     }
-    stepperPosition -= ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION);
+    stepperPosition -= SINGLE_STEP;
   }
 
   digitalWrite(STEP_PIN, HIGH);
@@ -331,6 +332,7 @@ void secondCoreTask( void * parameter) {
       
       break;
     case recognizedShort:
+      isSpindelEnabled = false;
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       break;
