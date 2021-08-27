@@ -102,6 +102,7 @@ bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
 bool isSpindelEnabled = false;
 bool autoMoveToZero = false;
+int8_t jogReadCounter = 0;
 
 // Degree calculation
 int64_t encoderAbs=0;
@@ -212,6 +213,13 @@ bool isLongPress(int64_t start, int64_t end) {
   return false;
 }
 
+bool isShortPress(int64_t start, int64_t end) {
+  if (end - start >= 50) {
+    return true;
+  }
+  return false;
+}
+
 void markButtonAsLongPress(ButtonConfig* button) {
   button->state = recognizedLong;
   button->pressTime = millis();
@@ -240,14 +248,16 @@ ButtonState checkButtonState(ButtonConfig* button) {
       button->releaseTime = millis();
       if (isLongPress(button->pressTime, button->releaseTime)) {
         markButtonAsLongPress(button);
-      } else {
+      } else if (isShortPress(button->pressTime, button->releaseTime)) {
         button->state = recognizedShort;
+      } else {
+        //Some wired noise. Do nothing
       }
     } else {
       if (isLongPress(button->pressTime, millis())) {
         markButtonAsLongPress(button);
       }
-      // else: Currently it is a short press but we do not know yet
+      // else: Currently, it is not possible to distinguish between long and short.
     }
   }
   return button->state;
@@ -270,9 +280,7 @@ void secondCoreTask( void * parameter) {
   pinMode(BUTTON_JOG_LEFT_PIN, INPUT_PULLUP);
   pinMode(BUTTON_JOG_RIGHT_PIN, INPUT_PULLUP);
 
-  //TODO: Setup buttons
-
-  while (true) {
+  for(;;) {
 
     switch (checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
     case recognizedLong:
@@ -304,8 +312,7 @@ void secondCoreTask( void * parameter) {
       break;
     }
 
-
-     switch (checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
+    switch (checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
     case recognizedLong:
     if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
@@ -341,28 +348,31 @@ void secondCoreTask( void * parameter) {
     }
 
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
-      if (currentJogMode != left) {
+      jogReadCounter = max(-5, jogReadCounter-1);
+      if (currentJogMode != left && jogReadCounter == -5) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = left;
       }
       isSpindelEnabled = false;
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
-      if (currentJogMode != right) {
+      jogReadCounter = min(5, jogReadCounter+1);
+      if (currentJogMode != right && jogReadCounter == 5) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
       isSpindelEnabled = false;
     } else {
-       currentJogMode = neutral;
-       jogCurrentSpeedMultiplier = 1.0f;
+      jogReadCounter = 0;
+      currentJogMode = neutral;
+      jogCurrentSpeedMultiplier = 1.0f;
     }
   
     display.clearDisplay();
-    display.setTextSize(2);             // Normal 1:1 pixel scale
-    display.setTextColor(SSD1306_WHITE);        // Draw white text
-    display.setCursor(0,0);             // Start at top-left corner
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,0);
     display.println("RPM " + String(rpm));
-    display.setTextSize(1);             // Normal 1:1 pixel scale
+    display.setTextSize(1);
     display.println("Max " + String(maxRpm));
 
     String spindelState;
@@ -407,7 +417,8 @@ void setup() {
     NULL,  /* Task input parameter */
     2,  /* Priority of the task */
     &userInterfaceTask,  /* Task handle. */
-    0); /* Core where the task should run */
+    0
+  ); /* Core where the task should run */
 }
 
 void loop() {
