@@ -157,11 +157,13 @@ void startSingleStep(bool dir, bool isJog) {
 
   if (directionChanged && !isnan(stepperTarget)) {
     waitToSyncSpindel = true;
+    Serial.println("Start waitToSyncSpindel");
   }
 
   if (waitToSyncSpindel && !isJog) {
     if ((int)encoderDeg == 0) {
       waitToSyncSpindel = false;
+      Serial.println("End waitToSyncSpindel");
       // Spindel in sync
     } else {
       return;
