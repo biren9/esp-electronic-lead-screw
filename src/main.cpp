@@ -80,7 +80,6 @@ ESP32Encoder encoder;
 int64_t encoderLastUpm = 0;     // letzte Position des Encoders (UPM) in Steps *4 (Quad)
 int64_t encoderAct = 0;      // aktue Position des Encoders in Steps *4 (Quad)
 int64_t encoderLastSteps = 0; // Tempvariable für encoderDoSteps
-float encoderLastStepsFrac = 0; // Tempvariable für encoderDoSteps
 
 // RPM
 int rpm = 0; // Umdrehung pro Minute
@@ -131,6 +130,15 @@ void endSingleStep() {
   digitalWrite(STEP_PIN, LOW);
 }
 
+void updatePosition(bool direction) {
+  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+  if (direction) {
+    encoderLastSteps += encoderStepsPerStepperStep;
+  } else {
+    encoderLastSteps -= encoderStepsPerStepperStep;
+  }
+}
+
 // Moves the stepper.
 void startSingleStep(bool dir, bool isJog) {
   bool needBacklashCompensation = false;
@@ -166,6 +174,7 @@ void startSingleStep(bool dir, bool isJog) {
       Serial.println("End waitToSyncSpindel");
       // Spindel in sync
     } else {
+      encoderLastSteps = encoder.getCount();
       return;
     }
   } else if (isJog && !isnan(stepperTarget) && !hasJogPausedAtTarget) {
@@ -205,6 +214,7 @@ void startSingleStep(bool dir, bool isJog) {
   }
 
   digitalWrite(STEP_PIN, HIGH);
+  updatePosition(dir);
   directionChanged = false;
 }
 
@@ -326,6 +336,7 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     case recognizedShort:
+    Serial.println("Manuel stop/start");
       isSpindelEnabled = !isSpindelEnabled;
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
@@ -335,12 +346,12 @@ void secondCoreTask( void * parameter) {
 
     switch (checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
     case recognizedLong:
-      stepperTarget += stepperPosition;
       stepperPosition = 0.0f;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       
       break;
     case recognizedShort:
+    Serial.println("autoMoveToZero");
       isSpindelEnabled = false;
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
@@ -350,18 +361,21 @@ void secondCoreTask( void * parameter) {
     }
 
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
-      jogReadCounter = max(-5, jogReadCounter-1);
-      if (currentJogMode != left && jogReadCounter == -5) {
+      jogReadCounter -= 1;
+      if (currentJogMode != left && jogReadCounter >= -5) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = left;
       }
+    
+      Serial.println("Jog left signal");
       isSpindelEnabled = false;
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
-      jogReadCounter = min(5, jogReadCounter+1);
-      if (currentJogMode != right && jogReadCounter == 5) {
+      jogReadCounter += 1;
+      if (currentJogMode != right && jogReadCounter <= 5) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
+      Serial.println("Jog right signal");
       isSpindelEnabled = false;
     } else {
       jogReadCounter = 0;
@@ -441,6 +455,7 @@ void loop() {
 
     // Stop the spindel if we are running to fast.
     if (rpm > maxRpm) {
+      Serial.println("To fast");
       isSpindelEnabled = false;
     }
   }
@@ -479,20 +494,7 @@ void loop() {
     jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + 0.05f, jogMaxSpeedMultiplier);
   } else {
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
-      float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
-      float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
-      int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
       bool direction = stepsToDo > 0;
-
-      if (direction) {
-        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
-        encoderLastSteps += encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
-        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
-      } else {
-        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
-        encoderLastSteps -= encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
-        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
-      }
 
       if (isSpindelEnabled) {
         startSingleStep(direction, false);
