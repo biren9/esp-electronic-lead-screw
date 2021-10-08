@@ -163,17 +163,18 @@ void startSingleStep(bool dir, bool isJog) {
     }
   }
 
-  if (directionChanged && !isnan(stepperTarget)) {
+  if (directionChanged && !isnan(stepperTarget) && !waitToSyncSpindel) {
     waitToSyncSpindel = true;
     Serial.println("Start waitToSyncSpindel");
   }
 
   if (waitToSyncSpindel && !isJog) {
-    if ((int)encoderDeg == 0) {
+    if ((int)encoderDeg <= 5) {
       waitToSyncSpindel = false;
       Serial.println("End waitToSyncSpindel");
       // Spindel in sync
     } else {
+      Serial.println((int)encoderDeg);
       encoderLastSteps = encoder.getCount();
       return;
     }
@@ -336,7 +337,6 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     case recognizedShort:
-    Serial.println("Manuel stop/start");
       isSpindelEnabled = !isSpindelEnabled;
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
@@ -351,7 +351,6 @@ void secondCoreTask( void * parameter) {
       
       break;
     case recognizedShort:
-    Serial.println("autoMoveToZero");
       isSpindelEnabled = false;
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
@@ -367,7 +366,6 @@ void secondCoreTask( void * parameter) {
         currentJogMode = left;
       }
     
-      Serial.println("Jog left signal");
       isSpindelEnabled = false;
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
       jogReadCounter += 1;
@@ -375,7 +373,6 @@ void secondCoreTask( void * parameter) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
-      Serial.println("Jog right signal");
       isSpindelEnabled = false;
     } else {
       jogReadCounter = 0;
@@ -455,7 +452,6 @@ void loop() {
 
     // Stop the spindel if we are running to fast.
     if (rpm > maxRpm) {
-      Serial.println("To fast");
       isSpindelEnabled = false;
     }
   }
