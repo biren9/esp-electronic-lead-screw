@@ -67,6 +67,7 @@ ESP32Encoder encoder;
 int64_t encoderLastUpm = 0;     // letzte Position des Encoders (UPM) in Steps *4 (Quad)
 int64_t encoderAct = 0;      // aktue Position des Encoders in Steps *4 (Quad)
 int64_t encoderLastSteps = 0; // Tempvariable für encoderDoSteps
+float encoderLastStepsFrac = 0.0f;
 
 // RPM
 int rpm = 0; // Umdrehung pro Minute
@@ -75,9 +76,8 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
-int feedIndex = 0;
-float availableFeeds[] = {0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.15, 0.20, 0.25, 0.30, 0.5, 0.75, 0.8, 1, 1.25, 1.5, 2, 3};
-// float spindleMmPerRound = 1.5f; // Leitspindelweg pro umdrehung in mm aka feed
+int feedIndex = 10;
+float availableFeeds[] = {-3.0f, -2.0f, -1.5f, -1.25f, -1.0f, -0.8f, -0.75f, -0.5f, 0.02f, 0.05f, 0.1f, 0.15f, 0.20f, 0.25f, 0.30f, 0.5f, 0.75f, 0.8f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f};
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
@@ -94,8 +94,6 @@ int8_t jogReadCounter = 0;
 
 // Degree calculation
 int64_t encoderAbs=0;
-bool zeroDeg=false; // wird auf true gesetzt wenn 0° Punkt erreicht
-bool dispZeroDeg=false;
 float encoderDeg = 0; // Winkel des encoders;
 
 void writeToDisplay(String text) {
@@ -105,14 +103,6 @@ void writeToDisplay(String text) {
   display.setCursor(0,0);             // Start at top-left corner
   display.println(text);
   display.display();
-}
-
-void IRAM_ATTR encoderISR() { 
-  encoderAbs = abs(encoder.getCount()/4)%(ENCODER_PULS_PER_REVOLUTION);
-  if(encoderAbs==0){
-    zeroDeg=true;
-    dispZeroDeg=true;
-  }
 }
 
 void endSingleStep() {
@@ -125,11 +115,19 @@ float spindleMmPerRound() {
 
 void updatePosition(bool direction) {
   float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+  float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
+  int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
+
+
   if (direction) {
-    encoderLastSteps += encoderStepsPerStepperStep;
-  } else {
-    encoderLastSteps -= encoderStepsPerStepperStep;
-  }
+        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
+        encoderLastSteps += encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
+        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
+      } else {
+        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
+        encoderLastSteps -= encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
+        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
+      }
 }
 
 // Moves the stepper.
@@ -156,12 +154,12 @@ bool startSingleStep(bool dir, bool isJog) {
     }
   }
 
-  if (directionChanged && !isnan(stepperTarget) && !waitToSyncSpindel) {
+  if (directionChanged && !isnan(stepperTarget) && !waitToSyncSpindel && !isJog) {
     waitToSyncSpindel = true;
     Serial.println("Start waitToSyncSpindel");
   }
 
-  if (waitToSyncSpindel && !isJog) {
+  if (waitToSyncSpindel) {
     if ((int)encoderDeg <= 5) {
       waitToSyncSpindel = false;
       Serial.println("End waitToSyncSpindel");
@@ -198,6 +196,7 @@ bool startSingleStep(bool dir, bool isJog) {
       return false; // Target reached!
     }
     stepperPosition += SINGLE_STEP;
+    updatePosition(true);
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
@@ -205,10 +204,10 @@ bool startSingleStep(bool dir, bool isJog) {
       return false; // Target reached!
     }
     stepperPosition -= SINGLE_STEP;
+    updatePosition(false);
   }
 
   digitalWrite(STEP_PIN, HIGH);
-  updatePosition(dir);
   directionChanged = false;
   return true;
 }
@@ -435,7 +434,7 @@ void loop() {
   encoderAct = encoder.getCount();
 
   // max RPM calculation
-  maxRpm = (MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200);
+  maxRpm = abs((MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200));
 
   // Stepperschritte pro Drehzahlencoder Schritt berechnen
   stepperStepsPerEncoderSteps = ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
@@ -490,7 +489,11 @@ void loop() {
 
       if (isSpindelEnabled) {
         stepPinIsOn = startSingleStep(direction, false);
-        lastStepTime = micros();
+        if (stepPinIsOn) {
+          lastStepTime = micros();
+        }
+      } else {
+        encoderLastSteps = encoderAct;
       }
     }
   
