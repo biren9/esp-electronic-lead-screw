@@ -8,6 +8,8 @@
 #include "ButtonState.h"
 #include "JogMode.h"
 
+// TODO BUG: If noo target is selected -> start spindle will jump at startup 
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -73,7 +75,9 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
-float spindleMmPerRound = 1.5f; // Leitspindelweg pro umdrehung in mm aka feed
+int feedIndex = 0;
+float availableFeeds[] = {0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.15, 0.20, 0.25, 0.30, 0.5, 0.75, 0.8, 1, 1.25, 1.5, 2, 3};
+// float spindleMmPerRound = 1.5f; // Leitspindelweg pro umdrehung in mm aka feed
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
@@ -115,8 +119,12 @@ void endSingleStep() {
   digitalWrite(STEP_PIN, LOW);
 }
 
+float spindleMmPerRound() {
+  return availableFeeds[feedIndex];
+}
+
 void updatePosition(bool direction) {
-  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
   if (direction) {
     encoderLastSteps += encoderStepsPerStepperStep;
   } else {
@@ -125,7 +133,7 @@ void updatePosition(bool direction) {
 }
 
 // Moves the stepper.
-void startSingleStep(bool dir, bool isJog) {
+bool startSingleStep(bool dir, bool isJog) {
   bool needBacklashCompensation = false;
   // Start slow if direction changed.
   if (stepDelayDirection != dir) {
@@ -161,23 +169,23 @@ void startSingleStep(bool dir, bool isJog) {
     } else {
       Serial.println((int)encoderDeg);
       encoderLastSteps = encoder.getCount();
-      return;
+      return false;
     }
   } else if (isJog && !isnan(stepperTarget) && !hasJogPausedAtTarget) {
     if (abs(stepperTarget - stepperPosition) <= THRESHOLD) {
       hasJogPausedAtTarget = true;
       disableJogUntil = millis() + 500;
-      return;
+      return false;
     } else if (abs(stepperPosition) <= THRESHOLD) {
       hasJogPausedAtTarget = true;
       disableJogUntil = millis() + 500;
-      return;
+      return false;
     }
   }
 
   if (isJog) {
     if (disableJogUntil > millis()) {
-      return; // Jog has to pause
+      return false; // Jog has to pause
     } else {
       hasJogPausedAtTarget = false;
     }
@@ -187,14 +195,14 @@ void startSingleStep(bool dir, bool isJog) {
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
       isSpindelEnabled = false;
-      return; // Target reached!
+      return false; // Target reached!
     }
     stepperPosition += SINGLE_STEP;
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
       isSpindelEnabled = false;
-      return; // Target reached!
+      return false; // Target reached!
     }
     stepperPosition -= SINGLE_STEP;
   }
@@ -202,6 +210,7 @@ void startSingleStep(bool dir, bool isJog) {
   digitalWrite(STEP_PIN, HIGH);
   updatePosition(dir);
   directionChanged = false;
+  return true;
 }
 
 bool isLongPress(int64_t start, int64_t end) {
@@ -269,7 +278,7 @@ void secondCoreTask( void * parameter) {
 
   preferences.begin("settings", false);
   backlashInSteps = preferences.getInt("backlash", backlashInSteps);
-  spindleMmPerRound = preferences.getFloat("feed", spindleMmPerRound);
+  feedIndex = preferences.getInt("feedIndex", feedIndex);
 
   pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
   pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
@@ -286,11 +295,13 @@ void secondCoreTask( void * parameter) {
       preferences.putInt("backlash", backlashInSteps);
       buttonConfigs[BUTTON_ADD_INDEX].handledAndAcceptMoreLong();
       break;
-    case recognizedShort:
-      spindleMmPerRound = min(spindleMmPerRound + 0.05f, 3.0f);
-      preferences.putFloat("feed", spindleMmPerRound);
+    case recognizedShort: {
+      int size = sizeof(availableFeeds) / sizeof(float);
+      feedIndex = min(feedIndex+1, size-1);
+      preferences.putInt("feedIndex", feedIndex);
       buttonConfigs[BUTTON_ADD_INDEX].handled();
       break;
+    }
     default:
       break;
     }
@@ -302,8 +313,8 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_REMOVE_INDEX].handledAndAcceptMoreLong();
       break;
     case recognizedShort:
-      spindleMmPerRound = max(spindleMmPerRound - 0.05f, 0.05f);
-      preferences.putFloat("feed", spindleMmPerRound);
+      feedIndex = max(feedIndex-1, 0);
+      preferences.putInt("feedIndex", feedIndex);
       buttonConfigs[BUTTON_REMOVE_INDEX].handled();
       break;
     default:
@@ -384,7 +395,7 @@ void secondCoreTask( void * parameter) {
       spindelState = "Off";
     }
 
-    display.println("Feed " + String(spindleMmPerRound) + " " + spindelState);
+    display.println("Feed " + String(spindleMmPerRound()) + " " + spindelState);
     display.println("Degree " + String(encoderDeg));
     if (!isnan(stepperTarget)) {
       display.println("Target " + String(stepperTarget));
@@ -424,10 +435,10 @@ void loop() {
   encoderAct = encoder.getCount();
 
   // max RPM calculation
-  maxRpm = (MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200);
+  maxRpm = (MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200);
 
   // Stepperschritte pro Drehzahlencoder Schritt berechnen
-  stepperStepsPerEncoderSteps = ((spindleMmPerRound / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
+  stepperStepsPerEncoderSteps = ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
 
   // calculate rpm
   if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
@@ -478,8 +489,7 @@ void loop() {
       bool direction = stepsToDo > 0;
 
       if (isSpindelEnabled) {
-        startSingleStep(direction, false);
-        stepPinIsOn = true;
+        stepPinIsOn = startSingleStep(direction, false);
         lastStepTime = micros();
       }
     }
