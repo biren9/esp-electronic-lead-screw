@@ -8,8 +8,6 @@
 #include "ButtonState.h"
 #include "JogMode.h"
 
-// TODO BUG: If noo target is selected -> start spindle will jump at startup 
-
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -130,6 +128,15 @@ void updatePosition(bool direction) {
       }
 }
 
+void startSpindel() {
+  waitToSyncSpindel = true;
+  isSpindelEnabled = true;
+}
+
+void stopSpindel() {
+  isSpindelEnabled = false;
+}
+
 // Moves the stepper.
 bool startSingleStep(bool dir, bool isJog) {
   bool needBacklashCompensation = false;
@@ -156,13 +163,13 @@ bool startSingleStep(bool dir, bool isJog) {
 
   if (directionChanged && !waitToSyncSpindel && !isJog) {
     waitToSyncSpindel = true;
-    Serial.println("Start waitToSyncSpindel");
+    Serial.println("Start syncing spindle...");
   }
 
   if (waitToSyncSpindel) {
     if ((int)encoderDeg <= 5) {
       waitToSyncSpindel = false;
-      Serial.println("End waitToSyncSpindel");
+      Serial.println("Spindle in sync!");
       // Spindel in sync
     } else {
       Serial.println((int)encoderDeg);
@@ -192,7 +199,7 @@ bool startSingleStep(bool dir, bool isJog) {
   if (dir) {  // clockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
-      isSpindelEnabled = false;
+      stopSpindel();
       return false; // Target reached!
     }
     stepperPosition += SINGLE_STEP;
@@ -200,7 +207,7 @@ bool startSingleStep(bool dir, bool isJog) {
   } else { // counterclockwise
     if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
       Serial.println("Target reached");
-      isSpindelEnabled = false;
+      stopSpindel();
       return false; // Target reached!
     }
     stepperPosition -= SINGLE_STEP;
@@ -332,7 +339,11 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     case recognizedShort:
-      isSpindelEnabled = !isSpindelEnabled;
+      if (isSpindelEnabled) {
+        stopSpindel();
+      } else {
+        startSpindel();
+      }
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     default:
@@ -346,7 +357,7 @@ void secondCoreTask( void * parameter) {
       
       break;
     case recognizedShort:
-      isSpindelEnabled = false;
+      stopSpindel();
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       break;
@@ -361,14 +372,14 @@ void secondCoreTask( void * parameter) {
         currentJogMode = left;
       }
     
-      isSpindelEnabled = false;
+      stopSpindel();
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
       jogReadCounter += 1;
       if (currentJogMode != right && jogReadCounter <= 5) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
-      isSpindelEnabled = false;
+      stopSpindel();
     } else {
       jogReadCounter = 0;
       currentJogMode = neutral;
@@ -447,7 +458,7 @@ void loop() {
 
     // Stop the spindel if we are running to fast.
     if (rpm > maxRpm) {
-      isSpindelEnabled = false;
+      stopSpindel();
     }
   }
 
