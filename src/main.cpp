@@ -5,6 +5,8 @@
 #include <Adafruit_SSD1306.h>
 #include <ESP32Encoder.h>
 #include <Preferences.h>
+#include "ButtonState.h"
+#include "JogMode.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -41,22 +43,6 @@
 #define BUTTON_JOG_LEFT_PIN 33
 #define BUTTON_JOG_RIGHT_PIN 35
 
-enum ButtonState { readyToTrigger, pressedDown, recognizedShort, recognizedLong, handled, listenOnlyForLong };
-struct ButtonConfig { 
-  int pin; 
-  ButtonState state;
-  int64_t pressTime;
-  int64_t releaseTime;
-
-  void handled() {
-    this->state = ButtonState::handled;
-  }
-
-  void handledAndAcceptMoreLong() {
-    this->state = ButtonState::listenOnlyForLong;
-  }
-};
-
 ButtonConfig buttonConfigs[4] = {
   ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
   ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
@@ -64,7 +50,6 @@ ButtonConfig buttonConfigs[4] = {
   ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0}
 };
 
-enum JOGMode { left, neutral, right };
 JOGMode currentJogMode = neutral;
 int64_t disableJogUntil = 0;
 float jogMaxSpeedMultiplier = 100.0f;
