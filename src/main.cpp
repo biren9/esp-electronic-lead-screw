@@ -51,10 +51,8 @@ ButtonConfig buttonConfigs[4] = {
 };
 
 JOGMode currentJogMode = neutral;
-int64_t disableJogUntil = 0;
 float jogMaxSpeedMultiplier = 100.0f;
 float jogCurrentSpeedMultiplier = 1.0f;
-bool hasJogPausedAtTarget = false;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
@@ -175,24 +173,6 @@ bool startSingleStep(bool dir, bool isJog) {
       Serial.println((int)encoderDeg);
       encoderLastSteps = encoder.getCount();
       return false;
-    }
-  } else if (isJog && !isnan(stepperTarget) && !hasJogPausedAtTarget) {
-    if (abs(stepperTarget - stepperPosition) <= THRESHOLD) {
-      hasJogPausedAtTarget = true;
-      disableJogUntil = millis() + 500;
-      return false;
-    } else if (abs(stepperPosition) <= THRESHOLD) {
-      hasJogPausedAtTarget = true;
-      disableJogUntil = millis() + 500;
-      return false;
-    }
-  }
-
-  if (isJog) {
-    if (disableJogUntil > millis()) {
-      return false; // Jog has to pause
-    } else {
-      hasJogPausedAtTarget = false;
     }
   }
 
@@ -352,6 +332,7 @@ void secondCoreTask( void * parameter) {
 
     switch (checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
     case recognizedLong:
+      stepperTarget -= stepperPosition;
       stepperPosition = 0.0f;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       
