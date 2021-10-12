@@ -95,109 +95,15 @@ int8_t jogReadCounter = 0;
 int64_t encoderAbs=0;
 float encoderDeg = 0; // Winkel des encoders;
 
-void endSingleStep() {
-  digitalWrite(STEP_PIN, LOW);
-}
-
 float spindleMmPerRound() {
   return availableFeeds[feedIndex];
 }
 
-void updatePosition(bool direction) {
-  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
-  float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
-  int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
-
-  if (direction) {
-        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
-        encoderLastSteps += encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
-        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
-      } else {
-        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
-        encoderLastSteps -= encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
-        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
-      }
-}
-
-void startSpindel() {
-  waitToSyncSpindel = true;
-  isSpindelEnabled = true;
-}
-
-void stopSpindel() {
-  isSpindelEnabled = false;
-}
-
-// Moves the stepper.
-bool startSingleStep(bool dir, bool isJog) {
-  bool needBacklashCompensation = false;
-  // Start slow if direction changed.
-  if (stepDelayDirection != dir) {
-    // stepDelayUs = PULSE_MAX_US;
-    stepDelayDirection = dir;
-    digitalWrite(DIR_PIN, dir ? HIGH : LOW);
-    delayMicroseconds(10); // Need for changing Direction
-    Serial.println("Direction change");
-    directionChanged = true;
-    needBacklashCompensation = true;
-  }
-
-  //Compensate Backlash
-  if (needBacklashCompensation) {
-    for (int backlashStep = 1; backlashStep <= backlashInSteps; ++backlashStep) {
-      digitalWrite(STEP_PIN, HIGH);
-      delayMicroseconds(100);
-      digitalWrite(STEP_PIN, LOW);
-      delayMicroseconds(400);
-    }
-  }
-
-  if (directionChanged && !waitToSyncSpindel && !isJog) {
-    waitToSyncSpindel = true;
-    Serial.println("Start syncing spindle...");
-  }
-
-  if (waitToSyncSpindel) {
-    if ((int)encoderDeg <= 5) {
-      waitToSyncSpindel = false;
-      Serial.println("Spindle in sync!");
-      // Spindel in sync
-    } else {
-      Serial.println((int)encoderDeg);
-      encoderLastSteps = encoder.getCount();
-      return false;
-    }
-  }
-
-  if (dir) {  // clockwise
-    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
-      Serial.println("Target reached");
-      stopSpindel();
-      return false; // Target reached!
-    }
-    stepperPosition += SINGLE_STEP;
-    updatePosition(true);
-  } else { // counterclockwise
-    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
-      Serial.println("Target reached");
-      stopSpindel();
-      return false; // Target reached!
-    }
-    stepperPosition -= SINGLE_STEP;
-    updatePosition(false);
-  }
-
-  digitalWrite(STEP_PIN, HIGH);
-  directionChanged = false;
-  return true;
-}
-
-void performBlockingStep(bool direction, float multiplier) {
-  startSingleStep(direction, true);
-  delayMicroseconds(20000/multiplier);
-  digitalWrite(STEP_PIN, LOW);
-  delayMicroseconds(20000/multiplier);
-}
+// #################################################################################
+// ### 
+// ### Second core task - Userinterface
+// ### 
+// #################################################################################
 
 void secondCoreTask( void * parameter) {
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -343,6 +249,112 @@ void secondCoreTask( void * parameter) {
   }
 }
 
+// #################################################################################
+// ### 
+// ### Primary core task - stepper driver
+// ### 
+// #################################################################################
+
+void updatePosition(bool direction) {
+  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+  float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
+  int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
+
+  if (direction) {
+        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
+        encoderLastSteps += encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
+        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
+      } else {
+        encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
+        encoderLastSteps -= encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
+        encoderLastStepsFrac -= (int)encoderLastStepsFrac;
+      }
+}
+
+void startSpindel() {
+  waitToSyncSpindel = true;
+  isSpindelEnabled = true;
+}
+
+void stopSpindel() {
+  isSpindelEnabled = false;
+}
+
+void endSingleStep() {
+  digitalWrite(STEP_PIN, LOW);
+}
+
+// Moves the stepper.
+bool startSingleStep(bool dir, bool isJog) {
+  bool needBacklashCompensation = false;
+  // Start slow if direction changed.
+  if (stepDelayDirection != dir) {
+    // stepDelayUs = PULSE_MAX_US;
+    stepDelayDirection = dir;
+    digitalWrite(DIR_PIN, dir ? HIGH : LOW);
+    delayMicroseconds(10); // Need for changing Direction
+    Serial.println("Direction change");
+    directionChanged = true;
+    needBacklashCompensation = true;
+  }
+
+  //Compensate Backlash
+  if (needBacklashCompensation) {
+    for (int backlashStep = 1; backlashStep <= backlashInSteps; ++backlashStep) {
+      digitalWrite(STEP_PIN, HIGH);
+      delayMicroseconds(100);
+      digitalWrite(STEP_PIN, LOW);
+      delayMicroseconds(400);
+    }
+  }
+
+  if (directionChanged && !waitToSyncSpindel && !isJog) {
+    waitToSyncSpindel = true;
+    Serial.println("Start syncing spindle...");
+  }
+
+  if (waitToSyncSpindel) {
+    if ((int)encoderDeg <= 5) {
+      waitToSyncSpindel = false;
+      Serial.println("Spindle in sync!");
+      // Spindel in sync
+    } else {
+      Serial.println((int)encoderDeg);
+      encoderLastSteps = encoder.getCount();
+      return false;
+    }
+  }
+
+  if (dir) {  // clockwise
+    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
+      Serial.println("Target reached");
+      stopSpindel();
+      return false; // Target reached!
+    }
+    stepperPosition += SINGLE_STEP;
+    updatePosition(true);
+  } else { // counterclockwise
+    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
+      Serial.println("Target reached");
+      stopSpindel();
+      return false; // Target reached!
+    }
+    stepperPosition -= SINGLE_STEP;
+    updatePosition(false);
+  }
+
+  digitalWrite(STEP_PIN, HIGH);
+  directionChanged = false;
+  return true;
+}
+
+void performBlockingStep(bool direction, float multiplier) {
+  startSingleStep(direction, true);
+  delayMicroseconds(20000/multiplier);
+  digitalWrite(STEP_PIN, LOW);
+  delayMicroseconds(20000/multiplier);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -400,7 +412,7 @@ void loop() {
 
   if (autoMoveToZero) {
     // Auto move to zero handler 
-    if (abs(stepperPosition) >= THRESHOLD && autoMoveToZero) {
+    if (abs(stepperPosition) >= THRESHOLD) {
       bool direction = stepperPosition > 0 ? false : true;
       performBlockingStep(direction, autoMoveToZeroMultiplier);
       autoMoveToZeroMultiplier = min(autoMoveToZeroMultiplier + autoMoveIncreaseStep, maxSpeedMultiplier);
