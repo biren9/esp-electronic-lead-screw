@@ -192,6 +192,13 @@ bool startSingleStep(bool dir, bool isJog) {
   return true;
 }
 
+void performBlockingStep(bool direction, float multiplier) {
+  startSingleStep(direction, true);
+  delayMicroseconds(20000/multiplier);
+  digitalWrite(STEP_PIN, LOW);
+  delayMicroseconds(20000/multiplier);
+}
+
 void secondCoreTask( void * parameter) {
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -392,29 +399,22 @@ void loop() {
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
 
   if (autoMoveToZero) {
+    // Auto move to zero handler 
     if (abs(stepperPosition) >= THRESHOLD && autoMoveToZero) {
       bool direction = stepperPosition > 0 ? false : true;
-      startSingleStep(direction, true);
-      delayMicroseconds(20000/autoMoveToZeroMultiplier);
-      digitalWrite(STEP_PIN, LOW);
-      delayMicroseconds(20000/autoMoveToZeroMultiplier);
+      performBlockingStep(direction, autoMoveToZeroMultiplier);
       autoMoveToZeroMultiplier = min(autoMoveToZeroMultiplier + autoMoveIncreaseStep, maxSpeedMultiplier);
     } else {
       autoMoveToZeroMultiplier = 1.0f;
       autoMoveToZero = false;
     }
   } else if (currentJogMode != neutral) {
-    if (currentJogMode == left) {
-      startSingleStep(true, true);
-    } else {
-      startSingleStep(false, true);
-    }
-
-    delayMicroseconds(20000/jogCurrentSpeedMultiplier);
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(20000/jogCurrentSpeedMultiplier);
+    // Jog handler 
+    bool direction = currentJogMode == left ? true : false;
+    performBlockingStep(direction, jogCurrentSpeedMultiplier);
     jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + jogIncreaseStep, maxSpeedMultiplier);
   } else {
+    // Spindle step handler
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
       bool direction = stepsToDo > 0;
 
