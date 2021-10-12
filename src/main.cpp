@@ -92,15 +92,6 @@ int8_t jogReadCounter = 0;
 int64_t encoderAbs=0;
 float encoderDeg = 0; // Winkel des encoders;
 
-void writeToDisplay(String text) {
-  display.clearDisplay();
-  display.setTextSize(2);             // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);        // Draw white text
-  display.setCursor(0,0);             // Start at top-left corner
-  display.println(text);
-  display.display();
-}
-
 void endSingleStep() {
   digitalWrite(STEP_PIN, LOW);
 }
@@ -113,7 +104,6 @@ void updatePosition(bool direction) {
   float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
   float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
   int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
-
 
   if (direction) {
         encoderLastStepsFrac += encoderStepsPerStepperStep_frac;
@@ -289,17 +279,18 @@ void secondCoreTask( void * parameter) {
       break;
     }
 
+    int8_t maxCounter = 5;
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
-      jogReadCounter -= 1;
-      if (currentJogMode != left && jogReadCounter >= -5) {
+      jogReadCounter = max(jogReadCounter-1, -maxCounter);
+      if (currentJogMode != left && jogReadCounter == -maxCounter) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = left;
       }
     
       stopSpindel();
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
-      jogReadCounter += 1;
-      if (currentJogMode != right && jogReadCounter <= 5) {
+      jogReadCounter = min(jogReadCounter+1, -maxCounter);
+      if (currentJogMode != right && jogReadCounter <= maxCounter) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
