@@ -51,8 +51,11 @@ ButtonConfig buttonConfigs[4] = {
 };
 
 JOGMode currentJogMode = neutral;
-float jogMaxSpeedMultiplier = 100.0f;
+float maxSpeedMultiplier = 100.0f;
 float jogCurrentSpeedMultiplier = 1.0f;
+float jogIncreaseStep = 0.05f;
+float autoMoveToZeroMultiplier = 1.0f;
+float autoMoveIncreaseStep = 0.2f;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
@@ -272,6 +275,7 @@ void secondCoreTask( void * parameter) {
       break;
     case recognizedShort:
       stopSpindel();
+      autoMoveToZeroMultiplier = 1.0f;
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       break;
@@ -388,16 +392,17 @@ void loop() {
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
 
   if (autoMoveToZero) {
-    float multiplier = 1;
-    while (abs(stepperPosition) >= THRESHOLD && autoMoveToZero) {
+    if (abs(stepperPosition) >= THRESHOLD && autoMoveToZero) {
       bool direction = stepperPosition > 0 ? false : true;
       startSingleStep(direction, true);
-      delayMicroseconds(20000/multiplier);
+      delayMicroseconds(20000/autoMoveToZeroMultiplier);
       digitalWrite(STEP_PIN, LOW);
-      delayMicroseconds(20000/multiplier);
-      multiplier = min(multiplier + 0.2f, 100.0f);
+      delayMicroseconds(20000/autoMoveToZeroMultiplier);
+      autoMoveToZeroMultiplier = min(autoMoveToZeroMultiplier + autoMoveIncreaseStep, maxSpeedMultiplier);
+    } else {
+      autoMoveToZeroMultiplier = 1.0f;
+      autoMoveToZero = false;
     }
-    autoMoveToZero = false;
   } else if (currentJogMode != neutral) {
     if (currentJogMode == left) {
       startSingleStep(true, true);
@@ -408,7 +413,7 @@ void loop() {
     delayMicroseconds(20000/jogCurrentSpeedMultiplier);
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(20000/jogCurrentSpeedMultiplier);
-    jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + 0.05f, jogMaxSpeedMultiplier);
+    jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + jogIncreaseStep, maxSpeedMultiplier);
   } else {
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
       bool direction = stepsToDo > 0;
