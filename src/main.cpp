@@ -5,7 +5,7 @@
 #include <Adafruit_SSD1306.h>
 #include <ESP32Encoder.h>
 #include <Preferences.h>
-#include "ButtonState.h"
+#include "Button.h"
 #include "JogMode.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -199,63 +199,6 @@ bool startSingleStep(bool dir, bool isJog) {
   return true;
 }
 
-bool isLongPress(int64_t start, int64_t end) {
-  if (end - start >= 500) {
-    return true;
-  }
-  return false;
-}
-
-bool isShortPress(int64_t start, int64_t end) {
-  if (end - start >= 50) {
-    return true;
-  }
-  return false;
-}
-
-void markButtonAsLongPress(ButtonConfig* button) {
-  button->state = recognizedLong;
-  button->pressTime = millis();
-  button->releaseTime = 0;
-}
-
-// TODO multiple long press detection not working?
-ButtonState checkButtonState(ButtonConfig* button) {
-  if (button->state == listenOnlyForLong) {
-    if (digitalRead(button->pin) == HIGH) {
-      button->state = handled;
-    } else {
-      if (isLongPress(button->pressTime, millis())) {
-        markButtonAsLongPress(button);
-      }
-    }
-  } else if (button->state == handled && digitalRead(button->pin) == HIGH) {
-    button->state = readyToTrigger;
-  } else if (button->state == readyToTrigger) {
-    if (digitalRead(button->pin) == LOW) {
-      button->state = pressedDown;
-      button->pressTime = millis();
-    }
-  } else if (button->state == pressedDown) {
-    if (digitalRead(button->pin) == HIGH) { // Button released
-      button->releaseTime = millis();
-      if (isLongPress(button->pressTime, button->releaseTime)) {
-        markButtonAsLongPress(button);
-      } else if (isShortPress(button->pressTime, button->releaseTime)) {
-        button->state = recognizedShort;
-      } else {
-        //Some wired noise. Do nothing
-      }
-    } else {
-      if (isLongPress(button->pressTime, millis())) {
-        markButtonAsLongPress(button);
-      }
-      // else: Currently, it is not possible to distinguish between long and short.
-    }
-  }
-  return button->state;
-}
-
 void secondCoreTask( void * parameter) {
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -275,7 +218,7 @@ void secondCoreTask( void * parameter) {
 
   for(;;) {
 
-    switch (checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
+    switch (Button::checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
     case recognizedLong:
       backlashInSteps += 1;
       preferences.putInt("backlash", backlashInSteps);
@@ -292,7 +235,7 @@ void secondCoreTask( void * parameter) {
       break;
     }
 
-    switch (checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
+    switch (Button::checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
     case recognizedLong:
       backlashInSteps = max(0, backlashInSteps - 1);
       preferences.putInt("backlash", backlashInSteps);
@@ -307,7 +250,7 @@ void secondCoreTask( void * parameter) {
       break;
     }
 
-    switch (checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
+    switch (Button::checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
     case recognizedLong:
     if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
@@ -330,9 +273,9 @@ void secondCoreTask( void * parameter) {
       break;
     }
 
-    switch (checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
+    switch (Button::checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
     case recognizedLong:
-      stepperTarget -= stepperPosition;
+      stepperTarget -= stepperPosition; // TODO: Evaluate
       stepperPosition = 0.0f;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       

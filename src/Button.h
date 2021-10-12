@@ -15,3 +15,13 @@ struct ButtonConfig {
     this->state = ButtonState::listenOnlyForLong;
   }
 };
+
+class Button {
+    public:
+        static ButtonState checkButtonState(ButtonConfig*);
+
+    private:
+        static bool isLongPress(int64_t start, int64_t end);
+        static bool isShortPress(int64_t start, int64_t end);
+        static void markButtonAsLongPress(ButtonConfig* button);
+};
