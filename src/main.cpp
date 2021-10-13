@@ -7,6 +7,7 @@
 #include <Preferences.h>
 #include "Button.h"
 #include "JogMode.h"
+#include "Setting.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -22,7 +23,7 @@
 #define STEPPER_GEAR_RATIO 0.5f // example: 20 teath on stepper & 40 teeth on spindel is a 1/2 gear ratio
 #define MICROSTEPS_PER_REVOLUTION 400
 #define SPINDEL_THREAD_PITCH 1.5f // value in mm
-#define MINIMUM_STEP_PULS_WIDTH 4 // in µs
+#define MINIMUM_STEP_PULS_WIDTH 4 // in µs will result in speed -> less torque
 #define THRESHOLD 0.001f
 #define MAX_MOTOR_SPEED 1200 // Höchstgeschwindigkeit
 #define SINGLE_STEP ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION)
@@ -60,6 +61,8 @@ float autoMoveIncreaseStep = 0.2f;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
 Preferences preferences;
+
+SettingMode settingMode = none;
 
 // RPM Encoder
 ESP32Encoder encoder;
@@ -126,14 +129,28 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
     case recognizedLong:
-      backlashInSteps += 1;
-      preferences.putInt("backlash", backlashInSteps);
+      if (settingMode == none) {
+        stopSpindel();
+        settingMode == setting;
+      } else {
+        settingMode = Setting::next(settingMode);
+      }
       buttonConfigs[BUTTON_ADD_INDEX].handledAndAcceptMoreLong();
       break;
     case recognizedShort: {
-      int size = sizeof(availableFeeds) / sizeof(float);
-      feedIndex = min(feedIndex+1, size-1);
-      preferences.putInt("feedIndex", feedIndex);
+      switch (settingMode) {
+        case none:
+          int size = sizeof(availableFeeds) / sizeof(float);
+          feedIndex = min(feedIndex+1, size-1);
+          preferences.putInt("feedIndex", feedIndex);
+          break;
+        case backlash:
+          backlashInSteps += 1;
+          preferences.putInt("backlash", backlashInSteps);
+          break;
+        default:
+          break;
+      }
       buttonConfigs[BUTTON_ADD_INDEX].handled();
       break;
     }
@@ -143,13 +160,22 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
     case recognizedLong:
-      backlashInSteps = max(0, backlashInSteps - 1);
-      preferences.putInt("backlash", backlashInSteps);
-      buttonConfigs[BUTTON_REMOVE_INDEX].handledAndAcceptMoreLong();
+      settingMode = none;
+      buttonConfigs[BUTTON_ADD_INDEX].handled();
       break;
     case recognizedShort:
-      feedIndex = max(feedIndex-1, 0);
-      preferences.putInt("feedIndex", feedIndex);
+      switch (settingMode) {
+        case none:
+          feedIndex = max(feedIndex-1, 0);
+          preferences.putInt("feedIndex", feedIndex);
+          break;
+        case backlash:
+          backlashInSteps = max(0, backlashInSteps - 1);
+          preferences.putInt("backlash", backlashInSteps);
+          break;
+        default:
+          break;
+      }
       buttonConfigs[BUTTON_REMOVE_INDEX].handled();
       break;
     default:
@@ -214,14 +240,6 @@ void secondCoreTask( void * parameter) {
       currentJogMode = neutral;
       jogCurrentSpeedMultiplier = 1.0f;
     }
-  
-    display.clearDisplay();
-    display.setTextSize(2);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.println("RPM " + String(rpm));
-    display.setTextSize(1);
-    display.println("Max " + String(maxRpm));
 
     String spindelState;
     if (isSpindelEnabled) {
@@ -234,14 +252,44 @@ void secondCoreTask( void * parameter) {
       spindelState = "Off";
     }
 
-    display.println("Feed " + String(spindleMmPerRound()) + " " + spindelState);
-    display.println("Degree " + String(encoderDeg));
-    if (!isnan(stepperTarget)) {
-      display.println("Target " + String(stepperTarget));
+
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,0);
+    switch (settingMode) {
+    case none: // Operation mode
+      display.setTextSize(2);
+      display.println("RPM " + String(rpm));
+      display.setTextSize(1);
+      display.println("Max " + String(maxRpm));
+      display.println("Feed " + String(spindleMmPerRound()) + " " + spindelState);
+      display.println("Degree " + String(encoderDeg));
+      if (!isnan(stepperTarget)) {
+        display.println("Target " + String(stepperTarget));
+      }
+      display.println("Position " + String(stepperPosition));
+      break;
+    case setting:
+      display.setTextSize(2);
+      display.println("Setting");
+      display.setTextSize(1);
+      display.println("->");
+      break;
+    case backlash:
+      display.setTextSize(2);
+      display.println("Setting");
+      display.setTextSize(1);
+      display.println("Backlash: " + String(backlashInSteps));
+      break;
+    case measurementSystem:
+      display.setTextSize(2);
+      display.println("Setting");
+      display.setTextSize(1);
+      display.println("Unit: metric");
+      break;
     }
-    display.println("Position " + String(stepperPosition));
-    display.println("Backlash " + String(backlashInSteps));
     display.display();
+
     delay(20);
   }
 }
@@ -269,8 +317,10 @@ void updatePosition(bool direction) {
 }
 
 void startSpindel() {
-  waitToSyncSpindel = true;
-  isSpindelEnabled = true;
+  if (settingMode == settingMode) {
+    waitToSyncSpindel = true;
+    isSpindelEnabled = true;
+  }
 }
 
 void stopSpindel() {
@@ -406,6 +456,17 @@ void loop() {
   // Drive the motor
   int encoderActDifference = encoderAct - encoderLastSteps;
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
+
+  switch (settingMode) {
+    case backlash:
+      startSingleStep(true, true);
+      delay(250);
+      startSingleStep(false, true);
+      delay(250);
+      break;
+    default:
+      break;
+  }
 
   if (autoMoveToZero) {
     // Auto move to zero handler 
