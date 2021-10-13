@@ -160,10 +160,8 @@ void secondCoreTask( void * parameter) {
     case recognizedLong:
     if (isnan(stepperTarget)) {
         stepperTarget = stepperPosition;
-        waitToSyncSpindel = true;
       } else {
         stepperTarget = NAN;
-        waitToSyncSpindel = false;
       }
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
@@ -181,7 +179,6 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
     case recognizedLong:
-      stepperTarget -= stepperPosition; // TODO: Evaluate
       stepperPosition = 0.0f;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       
