@@ -8,6 +8,7 @@
 #include "Button.h"
 #include "JogMode.h"
 #include "Setting.h"
+#include "Pitch.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -62,7 +63,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
 Preferences preferences;
 
-SettingMode settingMode = none;
+SettingMode settingMode = SettingModeNone;
 
 // RPM Encoder
 ESP32Encoder encoder;
@@ -78,8 +79,11 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
-int feedIndex = 10;
-float availableFeeds[] = {-3.0f, -2.0f, -1.5f, -1.25f, -1.0f, -0.8f, -0.75f, -0.5f, 0.02f, 0.05f, 0.1f, 0.15f, 0.20f, 0.25f, 0.30f, 0.5f, 0.75f, 0.8f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f};
+bool invertFeed = false;
+bool isMetricFeed = true;
+int feedIndex = 0;
+float availableMetricFeeds[] = {0.02f, 0.05f, 0.1f, 0.15f, 0.20f, 0.25f, 0.30f, 0.5f, 0.75f, 0.8f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f};
+uint8_t availableImperialFeeds[] = {48, 40, 32, 28, 24, 20, 18, 16, 14, 13, 12, 11, 10, 9, 8, 7, 6};
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
@@ -99,7 +103,28 @@ int64_t encoderAbs=0;
 float encoderDeg = 0; // Winkel des encoders;
 
 float spindleMmPerRound() {
-  return availableFeeds[feedIndex];
+  float feed;
+  if (isMetricFeed) {
+      feed = availableMetricFeeds[feedIndex];
+    } else {
+      feed = Pitch::fromImperial(availableImperialFeeds[feedIndex]);
+    }
+  if (invertFeed) {
+    return feed * -1.0f;
+  } else {
+    return feed;
+  }
+}
+
+void startSpindel() {
+  if (settingMode == settingMode) {
+    waitToSyncSpindel = true;
+    isSpindelEnabled = true;
+  }
+}
+
+void stopSpindel() {
+  isSpindelEnabled = false;
 }
 
 // #################################################################################
@@ -117,6 +142,8 @@ void secondCoreTask( void * parameter) {
   preferences.begin("settings", false);
   backlashInSteps = preferences.getInt("backlash", backlashInSteps);
   feedIndex = preferences.getInt("feedIndex", feedIndex);
+  isMetricFeed = preferences.getBool("metricFeed", isMetricFeed);
+  invertFeed = preferences.getBool("invertFeed", invertFeed);
 
   pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
   pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
@@ -129,9 +156,9 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
     case recognizedLong:
-      if (settingMode == none) {
+      if (settingMode == SettingModeNone) {
         stopSpindel();
-        settingMode == setting;
+        settingMode = SettingModeSetting;
       } else {
         settingMode = Setting::next(settingMode);
       }
@@ -139,14 +166,31 @@ void secondCoreTask( void * parameter) {
       break;
     case recognizedShort: {
       switch (settingMode) {
-        case none:
-          int size = sizeof(availableFeeds) / sizeof(float);
+        case SettingModeNone: {
+          int size;
+          if (isMetricFeed) {
+            size = sizeof(availableMetricFeeds) / sizeof(float);
+          } else {
+            size = sizeof(availableImperialFeeds) / sizeof(uint8_t);
+          }
+          
           feedIndex = min(feedIndex+1, size-1);
           preferences.putInt("feedIndex", feedIndex);
           break;
-        case backlash:
+        }
+        case SettingModeBacklash:
           backlashInSteps += 1;
           preferences.putInt("backlash", backlashInSteps);
+          break;
+        case SettingModeMeasurementSystem:
+          isMetricFeed = !isMetricFeed;
+          feedIndex = 0;
+          preferences.putInt("feedIndex", feedIndex);
+          preferences.putBool("metricFeed", isMetricFeed);
+          break;
+        case SettingModeInvertFeed:
+          invertFeed = !invertFeed;
+          preferences.putBool("invertFeed", invertFeed);
           break;
         default:
           break;
@@ -160,18 +204,28 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
     case recognizedLong:
-      settingMode = none;
-      buttonConfigs[BUTTON_ADD_INDEX].handled();
+      settingMode = SettingModeNone;
+      buttonConfigs[BUTTON_REMOVE_INDEX].handled();
       break;
     case recognizedShort:
       switch (settingMode) {
-        case none:
+        case SettingModeNone:
           feedIndex = max(feedIndex-1, 0);
           preferences.putInt("feedIndex", feedIndex);
           break;
-        case backlash:
+        case SettingModeBacklash:
           backlashInSteps = max(0, backlashInSteps - 1);
           preferences.putInt("backlash", backlashInSteps);
+          break;
+        case SettingModeMeasurementSystem:
+          isMetricFeed = !isMetricFeed;
+          feedIndex = 0;
+          preferences.putInt("feedIndex", feedIndex);
+          preferences.putBool("metricFeed", isMetricFeed);
+          break;
+        case SettingModeInvertFeed:
+          invertFeed = !invertFeed;
+          preferences.putBool("invertFeed", invertFeed);
           break;
         default:
           break;
@@ -257,36 +311,46 @@ void secondCoreTask( void * parameter) {
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0,0);
     switch (settingMode) {
-    case none: // Operation mode
-      display.setTextSize(2);
-      display.println("RPM " + String(rpm));
-      display.setTextSize(1);
-      display.println("Max " + String(maxRpm));
-      display.println("Feed " + String(spindleMmPerRound()) + " " + spindelState);
-      display.println("Degree " + String(encoderDeg));
-      if (!isnan(stepperTarget)) {
-        display.println("Target " + String(stepperTarget));
+      case SettingModeNone: // Operation mode
+        display.setTextSize(2);
+        display.println("RPM " + String(rpm));
+        display.setTextSize(1);
+        display.println("Max " + String(maxRpm));
+        display.println("Feed " + String(spindleMmPerRound()) + " " + spindelState);
+        display.println("Degree " + String(encoderDeg));
+        if (!isnan(stepperTarget)) {
+          display.println("Target " + String(stepperTarget));
+        }
+        display.println("Position " + String(stepperPosition));
+        break;
+      case SettingModeSetting:
+        display.setTextSize(2);
+        display.println("Setting");
+        display.setTextSize(1);
+        display.println("->");
+        break;
+      case SettingModeBacklash:
+        display.setTextSize(2);
+        display.println("Setting");
+        display.setTextSize(1);
+        display.println("Backlash: " + String(backlashInSteps));
+        break;
+      case SettingModeMeasurementSystem: {
+        display.setTextSize(2);
+        display.println("Setting");
+        display.setTextSize(1);
+        String system = isMetricFeed ? String("Metric") : String("Imperial");
+        display.println("Unit: " + system);
+        break;
       }
-      display.println("Position " + String(stepperPosition));
-      break;
-    case setting:
-      display.setTextSize(2);
-      display.println("Setting");
-      display.setTextSize(1);
-      display.println("->");
-      break;
-    case backlash:
-      display.setTextSize(2);
-      display.println("Setting");
-      display.setTextSize(1);
-      display.println("Backlash: " + String(backlashInSteps));
-      break;
-    case measurementSystem:
-      display.setTextSize(2);
-      display.println("Setting");
-      display.setTextSize(1);
-      display.println("Unit: metric");
-      break;
+      case SettingModeInvertFeed: {
+        display.setTextSize(2);
+        display.println("Setting");
+        display.setTextSize(1);
+        String isInverted = invertFeed ? String("Yes") : String("No");
+        display.println("Invert Feed: " + isInverted);
+        break;
+      }
     }
     display.display();
 
@@ -314,17 +378,6 @@ void updatePosition(bool direction) {
         encoderLastSteps -= encoderStepsPerStepperStep_int + (int)encoderLastStepsFrac;
         encoderLastStepsFrac -= (int)encoderLastStepsFrac;
       }
-}
-
-void startSpindel() {
-  if (settingMode == settingMode) {
-    waitToSyncSpindel = true;
-    isSpindelEnabled = true;
-  }
-}
-
-void stopSpindel() {
-  isSpindelEnabled = false;
 }
 
 void endSingleStep() {
@@ -458,7 +511,7 @@ void loop() {
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
 
   switch (settingMode) {
-    case backlash:
+    case SettingModeBacklash:
       startSingleStep(true, true);
       delay(250);
       startSingleStep(false, true);

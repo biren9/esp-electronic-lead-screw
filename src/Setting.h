@@ -1,4 +1,10 @@
-enum SettingMode {none, setting, measurementSystem, backlash};
+enum SettingMode {
+    SettingModeNone, 
+    SettingModeSetting, 
+    SettingModeMeasurementSystem, 
+    SettingModeBacklash, 
+    SettingModeInvertFeed
+};
 
 class Setting {
     public:

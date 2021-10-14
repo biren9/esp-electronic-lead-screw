@@ -2,11 +2,13 @@
 
 SettingMode Setting::next(SettingMode mode) {
     switch (mode) {
-        case setting:
-            return backlash;
-        case backlash:
-            return measurementSystem;
-        case measurementSystem:
-            return setting;
+        case SettingModeSetting:
+            return SettingModeBacklash;
+        case SettingModeBacklash:
+            return SettingModeMeasurementSystem;
+        case SettingModeMeasurementSystem:
+            return SettingModeInvertFeed;
+        case SettingModeInvertFeed:
+            return SettingModeSetting;
     }
 }
