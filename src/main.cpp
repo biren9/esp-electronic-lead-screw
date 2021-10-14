@@ -79,40 +79,6 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
-Pitch availableMetricFeeds[] = {
-  Pitch::fromMetric(0.02f),
-  Pitch::fromMetric(0.05f),
-  Pitch::fromMetric(0.1f),
-  Pitch::fromMetric(0.15f),
-  Pitch::fromMetric(0.2f),
-  Pitch::fromMetric(0.25f),
-  Pitch::fromMetric(0.3f),
-  Pitch::fromMetric(0.5f),
-  Pitch::fromMetric(0.75f),
-  Pitch::fromMetric(0.8f),
-  Pitch::fromMetric(1.0f),
-  Pitch::fromMetric(1.25f),
-  Pitch::fromMetric(1.5f),
-  Pitch::fromMetric(2.0f),
-  Pitch::fromMetric(2.5f)
-};
-Pitch availableImperialFeeds[] = {
-  Pitch::fromImperial(48),
-  Pitch::fromImperial(40),
-  Pitch::fromImperial(32),
-  Pitch::fromImperial(28),
-  Pitch::fromImperial(24),
-  Pitch::fromImperial(20),
-  Pitch::fromImperial(18),
-  Pitch::fromImperial(16),
-  Pitch::fromImperial(14),
-  Pitch::fromImperial(13),
-  Pitch::fromImperial(12),
-  Pitch::fromImperial(11),
-  Pitch::fromImperial(10),
-  Pitch::fromImperial(9),
-  Pitch::fromImperial(8)
-};
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
@@ -350,7 +316,7 @@ void secondCoreTask( void * parameter) {
         display.setTextSize(2);
         display.println("Setting");
         display.setTextSize(1);
-        display.println("->");
+        display.println("Select an option");
         break;
       case SettingModeBacklash:
         display.setTextSize(2);
