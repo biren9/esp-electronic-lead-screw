@@ -82,8 +82,40 @@ int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus d
 bool invertFeed = false;
 bool isMetricFeed = true;
 int feedIndex = 0;
-float availableMetricFeeds[] = {0.02f, 0.05f, 0.1f, 0.15f, 0.20f, 0.25f, 0.30f, 0.5f, 0.75f, 0.8f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f};
-uint8_t availableImperialFeeds[] = {48, 40, 32, 28, 24, 20, 18, 16, 14, 13, 12, 11, 10, 9, 8, 7, 6};
+Pitch availableMetricFeeds[] = {
+  Pitch::fromMetric(0.02f),
+  Pitch::fromMetric(0.05f),
+  Pitch::fromMetric(0.1f),
+  Pitch::fromMetric(0.15f),
+  Pitch::fromMetric(0.2f),
+  Pitch::fromMetric(0.25f),
+  Pitch::fromMetric(0.3f),
+  Pitch::fromMetric(0.5f),
+  Pitch::fromMetric(0.75f),
+  Pitch::fromMetric(0.8f),
+  Pitch::fromMetric(1.0f),
+  Pitch::fromMetric(1.25f),
+  Pitch::fromMetric(1.5f),
+  Pitch::fromMetric(2.0f),
+  Pitch::fromMetric(2.5f)
+};
+Pitch availableImperialFeeds[] = {
+  Pitch::fromImperial(48),
+  Pitch::fromImperial(40),
+  Pitch::fromImperial(32),
+  Pitch::fromImperial(28),
+  Pitch::fromImperial(24),
+  Pitch::fromImperial(20),
+  Pitch::fromImperial(18),
+  Pitch::fromImperial(16),
+  Pitch::fromImperial(14),
+  Pitch::fromImperial(13),
+  Pitch::fromImperial(12),
+  Pitch::fromImperial(11),
+  Pitch::fromImperial(10),
+  Pitch::fromImperial(9),
+  Pitch::fromImperial(8)
+};
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
@@ -105,10 +137,10 @@ float encoderDeg = 0; // Winkel des encoders;
 float spindleMmPerRound() {
   float feed;
   if (isMetricFeed) {
-      feed = availableMetricFeeds[feedIndex];
-    } else {
-      feed = Pitch::fromImperial(availableImperialFeeds[feedIndex]);
-    }
+    feed = availableMetricFeeds[feedIndex].metricFeed;
+  } else {
+    feed = availableImperialFeeds[feedIndex].metricFeed;
+  }
   if (invertFeed) {
     return feed * -1.0f;
   } else {
@@ -311,18 +343,27 @@ void secondCoreTask( void * parameter) {
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0,0);
     switch (settingMode) {
-      case SettingModeNone: // Operation mode
+      case SettingModeNone: {// Operation mode
         display.setTextSize(2);
         display.println("RPM " + String(rpm));
         display.setTextSize(1);
         display.println("Max " + String(maxRpm));
-        display.println("Feed " + String(spindleMmPerRound()) + " " + spindelState);
+
+        String feedName;
+        if (isMetricFeed) {
+          feedName = availableMetricFeeds[feedIndex].name;
+        } else {
+          feedName = availableImperialFeeds[feedIndex].name;
+        }
+
+        display.println("Feed " + String(feedName + " " + spindelState));
         display.println("Degree " + String(encoderDeg));
         if (!isnan(stepperTarget)) {
           display.println("Target " + String(stepperTarget));
         }
         display.println("Position " + String(stepperPosition));
         break;
+      }
       case SettingModeSetting:
         display.setTextSize(2);
         display.println("Setting");

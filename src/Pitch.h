@@ -8,7 +8,7 @@ struct Pitch {
         return Pitch{String(pitch)+"mm", pitch};
     }
 
-    static float fromImperial(uint8_t tpi) {
-        return 25.4f/(float)tpi;
+    static Pitch fromImperial(uint8_t tpi) {
+        return Pitch{String(tpi)+"TPI", 25.4f/(float)tpi};
     }
 };
