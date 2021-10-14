@@ -10,5 +10,8 @@ SettingMode Setting::next(SettingMode mode) {
             return SettingModeInvertFeed;
         case SettingModeInvertFeed:
             return SettingModeSetting;
+        case SettingModeNone:
+            return SettingModeNone;
     }
+    return SettingModeNone;
 }

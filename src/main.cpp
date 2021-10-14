@@ -4,7 +4,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <ESP32Encoder.h>
-#include <Preferences.h>
+#include "LatheParameter.h"
 #include "Button.h"
 #include "JogMode.h"
 #include "Setting.h"
@@ -61,8 +61,8 @@ float autoMoveIncreaseStep = 0.2f;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
-Preferences preferences;
 
+LatheParameter* latheParameter  = new LatheParameter();
 SettingMode settingMode = SettingModeNone;
 
 // RPM Encoder
@@ -79,9 +79,6 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
-bool invertFeed = false;
-bool isMetricFeed = true;
-int feedIndex = 0;
 Pitch availableMetricFeeds[] = {
   Pitch::fromMetric(0.02f),
   Pitch::fromMetric(0.05f),
@@ -123,7 +120,6 @@ float stepperTarget = NAN; // in mm
 bool waitToSyncSpindel = false;
 unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
-int backlashInSteps = 20;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
 bool isSpindelEnabled = false;
@@ -136,12 +132,13 @@ float encoderDeg = 0; // Winkel des encoders;
 
 float spindleMmPerRound() {
   float feed;
-  if (isMetricFeed) {
+  int feedIndex = latheParameter->feedIndex();
+  if (latheParameter->isMetricFeed()) {
     feed = availableMetricFeeds[feedIndex].metricFeed;
   } else {
     feed = availableImperialFeeds[feedIndex].metricFeed;
   }
-  if (invertFeed) {
+  if (latheParameter->isInvertFeed()) {
     return feed * -1.0f;
   } else {
     return feed;
@@ -171,12 +168,6 @@ void secondCoreTask( void * parameter) {
     for(;;); // Don't proceed, loop forever
   }
 
-  preferences.begin("settings", false);
-  backlashInSteps = preferences.getInt("backlash", backlashInSteps);
-  feedIndex = preferences.getInt("feedIndex", feedIndex);
-  isMetricFeed = preferences.getBool("metricFeed", isMetricFeed);
-  invertFeed = preferences.getBool("invertFeed", invertFeed);
-
   pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
   pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
   pinMode(BUTTON_TARGET_PIN, INPUT_PULLUP);
@@ -200,29 +191,24 @@ void secondCoreTask( void * parameter) {
       switch (settingMode) {
         case SettingModeNone: {
           int size;
-          if (isMetricFeed) {
+          if (latheParameter->isMetricFeed()) {
             size = sizeof(availableMetricFeeds) / sizeof(float);
           } else {
             size = sizeof(availableImperialFeeds) / sizeof(uint8_t);
           }
           
-          feedIndex = min(feedIndex+1, size-1);
-          preferences.putInt("feedIndex", feedIndex);
+          latheParameter->setFeedIndex(min(latheParameter->feedIndex()+1, size-1));
           break;
         }
         case SettingModeBacklash:
-          backlashInSteps += 1;
-          preferences.putInt("backlash", backlashInSteps);
+          latheParameter->setBacklash(latheParameter->backlash()+1);
           break;
         case SettingModeMeasurementSystem:
-          isMetricFeed = !isMetricFeed;
-          feedIndex = 0;
-          preferences.putInt("feedIndex", feedIndex);
-          preferences.putBool("metricFeed", isMetricFeed);
+          latheParameter->setMetricFeed(!latheParameter->isMetricFeed());
+          latheParameter->setFeedIndex(0);
           break;
         case SettingModeInvertFeed:
-          invertFeed = !invertFeed;
-          preferences.putBool("invertFeed", invertFeed);
+          latheParameter->setInvertFeed(!latheParameter->isInvertFeed());
           break;
         default:
           break;
@@ -242,22 +228,17 @@ void secondCoreTask( void * parameter) {
     case recognizedShort:
       switch (settingMode) {
         case SettingModeNone:
-          feedIndex = max(feedIndex-1, 0);
-          preferences.putInt("feedIndex", feedIndex);
+          latheParameter->setFeedIndex(max(latheParameter->feedIndex()-1, 0));
           break;
         case SettingModeBacklash:
-          backlashInSteps = max(0, backlashInSteps - 1);
-          preferences.putInt("backlash", backlashInSteps);
+          latheParameter->setBacklash(max(latheParameter->backlash()-1, 0));
           break;
         case SettingModeMeasurementSystem:
-          isMetricFeed = !isMetricFeed;
-          feedIndex = 0;
-          preferences.putInt("feedIndex", feedIndex);
-          preferences.putBool("metricFeed", isMetricFeed);
+          latheParameter->setMetricFeed(!latheParameter->isMetricFeed());
+          latheParameter->setFeedIndex(0);
           break;
         case SettingModeInvertFeed:
-          invertFeed = !invertFeed;
-          preferences.putBool("invertFeed", invertFeed);
+          latheParameter->setInvertFeed(!latheParameter->isInvertFeed());
           break;
         default:
           break;
@@ -350,7 +331,8 @@ void secondCoreTask( void * parameter) {
         display.println("Max " + String(maxRpm));
 
         String feedName;
-        if (isMetricFeed) {
+        int feedIndex = latheParameter->feedIndex();
+        if (latheParameter->isMetricFeed()) {
           feedName = availableMetricFeeds[feedIndex].name;
         } else {
           feedName = availableImperialFeeds[feedIndex].name;
@@ -374,13 +356,13 @@ void secondCoreTask( void * parameter) {
         display.setTextSize(2);
         display.println("Setting");
         display.setTextSize(1);
-        display.println("Backlash: " + String(backlashInSteps));
+        display.println("Backlash: " + String(latheParameter->backlash()));
         break;
       case SettingModeMeasurementSystem: {
         display.setTextSize(2);
         display.println("Setting");
         display.setTextSize(1);
-        String system = isMetricFeed ? String("Metric") : String("Imperial");
+        String system = latheParameter->isMetricFeed() ? String("Metric") : String("Imperial");
         display.println("Unit: " + system);
         break;
       }
@@ -388,7 +370,7 @@ void secondCoreTask( void * parameter) {
         display.setTextSize(2);
         display.println("Setting");
         display.setTextSize(1);
-        String isInverted = invertFeed ? String("Yes") : String("No");
+        String isInverted = latheParameter->isInvertFeed() ? String("Yes") : String("No");
         display.println("Invert Feed: " + isInverted);
         break;
       }
@@ -441,7 +423,7 @@ bool startSingleStep(bool dir, bool isJog) {
 
   //Compensate Backlash
   if (needBacklashCompensation) {
-    for (int backlashStep = 1; backlashStep <= backlashInSteps; ++backlashStep) {
+    for (int backlashStep = 1; backlashStep <= latheParameter->backlash(); ++backlashStep) {
       digitalWrite(STEP_PIN, HIGH);
       delayMicroseconds(100);
       digitalWrite(STEP_PIN, LOW);
