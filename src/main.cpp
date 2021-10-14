@@ -112,7 +112,7 @@ float spindleMmPerRound() {
 }
 
 void startSpindel() {
-  if (settingMode == settingMode) {
+  if (settingMode == SettingModeNone) {
     waitToSyncSpindel = true;
     isSpindelEnabled = true;
   }
@@ -414,24 +414,16 @@ bool startSingleStep(bool dir, bool isJog) {
     }
   }
 
-  if (dir) {  // clockwise
-    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
-      Serial.println("Target reached");
-      stopSpindel();
-      return false; // Target reached!
-    }
-    stepperPosition += SINGLE_STEP;
-    updatePosition(true);
-  } else { // counterclockwise
-    if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
-      Serial.println("Target reached");
-      stopSpindel();
-      return false; // Target reached!
-    }
-    stepperPosition -= SINGLE_STEP;
-    updatePosition(false);
+ if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
+    Serial.println("Target reached");
+    stopSpindel();
+    return false; // Target reached!
   }
 
+  // dir true = clockwise
+  stepperPosition += dir ? SINGLE_STEP : -SINGLE_STEP;
+
+  updatePosition(dir);
   digitalWrite(STEP_PIN, HIGH);
   directionChanged = false;
   return true;
@@ -471,11 +463,11 @@ void loop() {
   // Curent encoder position
   encoderAct = encoder.getCount();
 
-  // max RPM calculation
-  maxRpm = abs((MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200));
-
   // Stepperschritte pro Drehzahlencoder Schritt berechnen
   stepperStepsPerEncoderSteps = ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
+
+  // max RPM calculation
+  maxRpm = abs((MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200));
 
   // calculate rpm
   if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
