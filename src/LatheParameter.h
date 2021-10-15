@@ -2,6 +2,7 @@
 #define __LatheParameter_h_
 #include "Pitch.h"
 #include "Setting.h"
+#include "JogMode.h"
 
 class LatheParameter {
 
@@ -45,6 +46,18 @@ class LatheParameter {
         float stepperTarget();
         void setStepperTarget(float value);
 
+        JOGMode currentJogMode();
+        void setCurrentJogMode(JOGMode value);
+        float jogCurrentSpeedMultiplier();
+        void setJogCurrentSpeedMultiplier(float value);
+        int8_t jogReadCounter();
+        void setJogReadCounter(int8_t value);
+
+        bool isAutoMoveToZero();
+        void setAutoMoveToZero(bool value);
+        float autoMoveToZeroMultiplier();
+        void setAutoMoveToZeroMultiplier(float value);
+
     private:
         int backlashValue;
         unsigned int feedIndexValue;
@@ -61,6 +74,13 @@ class LatheParameter {
 
         float stepperPositionValue;
         float stepperTargetValue;
+
+        JOGMode currentJogModeValue;
+        float jogCurrentSpeedMultiplierValue;
+        int8_t jogReadCounterValue;
+
+        bool isAutoMoveToZeroValue;
+        float autoMoveToZeroMultiplierValue;
 };
 
 #endif

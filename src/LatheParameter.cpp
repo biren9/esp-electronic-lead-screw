@@ -60,6 +60,13 @@ LatheParameter::LatheParameter() {
 
     this->stepperPositionValue = 0.0f;
     this->stepperTargetValue = NAN;
+
+    this->currentJogModeValue = neutral;
+    this->jogCurrentSpeedMultiplierValue = 1.0f;
+    this->jogReadCounterValue = 0;
+
+    this->isAutoMoveToZeroValue = false;
+    this->autoMoveToZeroMultiplierValue = 1.0f;
 }
 
 int LatheParameter::backlash() {
@@ -174,4 +181,37 @@ float LatheParameter::stepperTarget() {
 }
 void LatheParameter::setStepperTarget(float value) {
     this->stepperTargetValue = value;
+}
+
+JOGMode LatheParameter::currentJogMode() {
+    return this->currentJogModeValue;
+}
+void LatheParameter::setCurrentJogMode(JOGMode value) {
+    this->currentJogModeValue = value;
+}
+float LatheParameter::jogCurrentSpeedMultiplier() {
+    return this->jogCurrentSpeedMultiplierValue;
+}
+void LatheParameter::setJogCurrentSpeedMultiplier(float value) {
+    this->jogCurrentSpeedMultiplierValue = value;
+}
+int8_t LatheParameter::jogReadCounter() {
+    return this->jogReadCounterValue;
+}
+void LatheParameter::setJogReadCounter(int8_t value) {
+    this->jogReadCounterValue = value;
+}
+
+
+bool LatheParameter::isAutoMoveToZero() {
+    return this->isAutoMoveToZeroValue;
+}
+void LatheParameter::setAutoMoveToZero(bool value) {
+    this->isAutoMoveToZeroValue = value;
+}
+float LatheParameter::autoMoveToZeroMultiplier() {
+    return this->autoMoveToZeroMultiplierValue;
+}
+void LatheParameter::setAutoMoveToZeroMultiplier(float value) {
+    this->autoMoveToZeroMultiplierValue = value;
 }

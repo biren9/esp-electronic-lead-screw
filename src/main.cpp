@@ -17,11 +17,7 @@ ButtonConfig buttonConfigs[4] = {
   ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0}
 };
 
-JOGMode currentJogMode = neutral;
-float maxSpeedMultiplier = 100.0f;
-float jogCurrentSpeedMultiplier = 1.0f;
 float jogIncreaseStep = 0.05f;
-float autoMoveToZeroMultiplier = 1.0f;
 float autoMoveIncreaseStep = 0.2f;
 
 TaskHandle_t userInterfaceTask;
@@ -47,8 +43,6 @@ unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
-bool autoMoveToZero = false;
-int8_t jogReadCounter = 0;
 
 // Degree calculation
 int64_t encoderAbs=0;
@@ -167,8 +161,8 @@ void secondCoreTask( void * parameter) {
       break;
     case recognizedShort:
       latheParameter->stopSpindel();
-      autoMoveToZeroMultiplier = 1.0f;
-      autoMoveToZero = !autoMoveToZero;
+      latheParameter->setAutoMoveToZeroMultiplier(1.0f);
+      latheParameter->setAutoMoveToZero(latheParameter->isAutoMoveToZero());
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       break;
     default:
@@ -177,24 +171,24 @@ void secondCoreTask( void * parameter) {
 
     int8_t maxCounter = 5;
     if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
-      jogReadCounter = max(jogReadCounter-1, -maxCounter);
-      if (currentJogMode != left && jogReadCounter == -maxCounter) {
-        jogCurrentSpeedMultiplier = 1.0f;
-        currentJogMode = left;
+      latheParameter->setJogReadCounter(max(latheParameter->jogReadCounter()-1, -maxCounter));
+      if (latheParameter->currentJogMode() != left && latheParameter->jogReadCounter() == -maxCounter) {
+        latheParameter->setJogCurrentSpeedMultiplier(1.0f);
+        latheParameter->setCurrentJogMode(left);
       }
     
       latheParameter->stopSpindel();
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
-      jogReadCounter = min(jogReadCounter+1, -maxCounter);
-      if (currentJogMode != right && jogReadCounter <= maxCounter) {
-        jogCurrentSpeedMultiplier = 1.0f;
-        currentJogMode = right;
+      latheParameter->setJogReadCounter(min(latheParameter->jogReadCounter()+1, -maxCounter));
+      if (latheParameter->currentJogMode() != right && latheParameter->jogReadCounter() <= maxCounter) {
+        latheParameter->setJogCurrentSpeedMultiplier(1.0f);
+        latheParameter->setCurrentJogMode(right);
       }
       latheParameter->stopSpindel();
     } else {
-      jogReadCounter = 0;
-      currentJogMode = neutral;
-      jogCurrentSpeedMultiplier = 1.0f;
+      latheParameter->setJogReadCounter(0);
+      latheParameter->setJogCurrentSpeedMultiplier(1.0f);
+      latheParameter->setCurrentJogMode(neutral);
     }
 
     displayHandler->updateDisplay(latheParameter);
@@ -359,21 +353,21 @@ void loop() {
       break;
   }
 
-  if (autoMoveToZero) {
+  if (latheParameter->isAutoMoveToZero()) {
     // Auto move to zero handler 
     if (abs(latheParameter->stepperPosition()) >= THRESHOLD) {
       bool direction = latheParameter->stepperPosition() > 0 ? false : true;
-      performBlockingStep(direction, autoMoveToZeroMultiplier);
-      autoMoveToZeroMultiplier = min(autoMoveToZeroMultiplier + autoMoveIncreaseStep, maxSpeedMultiplier);
+      performBlockingStep(direction, latheParameter->autoMoveToZeroMultiplier());
+      latheParameter->setAutoMoveToZeroMultiplier(min(latheParameter->autoMoveToZeroMultiplier() + autoMoveIncreaseStep, MAX_SPEED_MULTIPLIER));
     } else {
-      autoMoveToZeroMultiplier = 1.0f;
-      autoMoveToZero = false;
+      latheParameter->setAutoMoveToZeroMultiplier(1.0f);
+      latheParameter->setAutoMoveToZero(false);
     }
-  } else if (currentJogMode != neutral) {
+  } else if (latheParameter->currentJogMode() != neutral) {
     // Jog handler 
-    bool direction = currentJogMode == left ? true : false;
-    performBlockingStep(direction, jogCurrentSpeedMultiplier);
-    jogCurrentSpeedMultiplier = min(jogCurrentSpeedMultiplier + jogIncreaseStep, maxSpeedMultiplier);
+    bool direction = latheParameter->currentJogMode() == left ? true : false;
+    performBlockingStep(direction, latheParameter->jogCurrentSpeedMultiplier());
+    latheParameter->setJogCurrentSpeedMultiplier(min(latheParameter->jogCurrentSpeedMultiplier() + jogIncreaseStep, MAX_SPEED_MULTIPLIER));
   } else {
     // Spindle step handler
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
