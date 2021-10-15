@@ -8,7 +8,6 @@
 #include "Button.h"
 #include "JogMode.h"
 #include "Setting.h"
-#include "Pitch.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -94,21 +93,6 @@ int8_t jogReadCounter = 0;
 int64_t encoderAbs=0;
 float encoderDeg = 0; // Winkel des encoders;
 
-float spindleMmPerRound() {
-  float feed;
-  int feedIndex = latheParameter->feedIndex();
-  if (latheParameter->isMetricFeed()) {
-    feed = availableMetricFeeds[feedIndex].metricFeed;
-  } else {
-    feed = availableImperialFeeds[feedIndex].metricFeed;
-  }
-  if (latheParameter->isInvertFeed()) {
-    return feed * -1.0f;
-  } else {
-    return feed;
-  }
-}
-
 void startSpindel() {
   if (settingMode == SettingModeNone) {
     waitToSyncSpindel = true;
@@ -154,13 +138,7 @@ void secondCoreTask( void * parameter) {
     case recognizedShort: {
       switch (settingMode) {
         case SettingModeNone: {
-          int size;
-          if (latheParameter->isMetricFeed()) {
-            size = sizeof(availableMetricFeeds) / sizeof(float);
-          } else {
-            size = sizeof(availableImperialFeeds) / sizeof(uint8_t);
-          }
-          
+          unsigned int size = latheParameter->availablePitches();
           latheParameter->setFeedIndex(min(latheParameter->feedIndex()+1, size-1));
           break;
         }
@@ -192,7 +170,7 @@ void secondCoreTask( void * parameter) {
     case recognizedShort:
       switch (settingMode) {
         case SettingModeNone:
-          latheParameter->setFeedIndex(max(latheParameter->feedIndex()-1, 0));
+          latheParameter->setFeedIndex(max(latheParameter->feedIndex()-1, 0u));
           break;
         case SettingModeBacklash:
           latheParameter->setBacklash(max(latheParameter->backlash()-1, 0));
@@ -294,14 +272,7 @@ void secondCoreTask( void * parameter) {
         display.setTextSize(1);
         display.println("Max " + String(latheParameter->maxRpm()));
 
-        String feedName;
-        int feedIndex = latheParameter->feedIndex();
-        if (latheParameter->isMetricFeed()) {
-          feedName = availableMetricFeeds[feedIndex].name;
-        } else {
-          feedName = availableImperialFeeds[feedIndex].name;
-        }
-
+        String feedName = latheParameter->spindlePitch().name;
         display.println("Feed " + String(feedName + " " + spindelState));
         display.println("Degree " + String(encoderDeg));
         if (!isnan(stepperTarget)) {
@@ -352,7 +323,7 @@ void secondCoreTask( void * parameter) {
 // #################################################################################
 
 void updatePosition(bool direction) {
-  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
+  float encoderStepsPerStepperStep = (ENCODER_PULS_PER_REVOLUTION * 4) / ((latheParameter->spindlePitch().metricFeed / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION)));
   float encoderStepsPerStepperStep_frac = encoderStepsPerStepperStep - (int) encoderStepsPerStepperStep;
   int encoderStepsPerStepperStep_int = encoderStepsPerStepperStep - encoderStepsPerStepperStep_frac;
 
@@ -462,10 +433,10 @@ void loop() {
   encoderAct = encoder.getCount();
 
   // Stepperschritte pro Drehzahlencoder Schritt berechnen
-  stepperStepsPerEncoderSteps = ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
+  stepperStepsPerEncoderSteps = ((latheParameter->spindlePitch().metricFeed / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
 
   // max RPM calculation
-  latheParameter->setMaxRpm(abs((MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200)));
+  latheParameter->setMaxRpm(abs((MAX_MOTOR_SPEED * 60) / ((latheParameter->spindlePitch().metricFeed / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200)));
 
   // calculate rpm
   if (millis() >= rpmMillisTemp + rpmMillisMeasure) {

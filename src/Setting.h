@@ -1,3 +1,6 @@
+#ifndef __Setting_h_
+#define __Setting_h_
+
 enum SettingMode {
     SettingModeNone, 
     SettingModeSetting, 
@@ -10,3 +13,5 @@ class Setting {
     public:
         static SettingMode next(SettingMode mode);
 };
+
+#endif

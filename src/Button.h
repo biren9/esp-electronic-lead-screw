@@ -1,3 +1,6 @@
+#ifndef __Button_h_
+#define __Button_h_
+
 #include <Arduino.h>
 
 enum ButtonState { readyToTrigger, pressedDown, recognizedShort, recognizedLong, handled, listenOnlyForLong };
@@ -25,3 +28,4 @@ class Button {
         static bool isShortPress(int64_t start, int64_t end);
         static void markButtonAsLongPress(ButtonConfig* button);
 };
+#endif

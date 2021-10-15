@@ -1,3 +1,7 @@
+#ifndef __LatheParameter_h_
+#define __LatheParameter_h_
+#include "Pitch.h"
+
 class LatheParameter {
 
     public:
@@ -7,8 +11,8 @@ class LatheParameter {
         int backlash();
         void setBacklash(int value);
 
-        int feedIndex();
-        void setFeedIndex(int value);
+        unsigned int feedIndex();
+        void setFeedIndex(unsigned int value);
 
         bool isMetricFeed();
         void setMetricFeed(bool value);
@@ -22,12 +26,18 @@ class LatheParameter {
         void setRpm(int value);
         void setMaxRpm(int value);
 
+        // Calculated parameters
+        Pitch spindlePitch();
+        unsigned int availablePitches();
+
     private:
         int backlashValue;
-        int feedIndexValue;
+        unsigned int feedIndexValue;
         bool metricFeedValue;
         bool invertFeedValue;
 
         int rpmValue;
         int maxRpmValue;
 };
+
+#endif
