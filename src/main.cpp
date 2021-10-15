@@ -2,47 +2,13 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <ESP32Encoder.h>
 #include "LatheParameter.h"
 #include "Button.h"
 #include "JogMode.h"
 #include "Setting.h"
-
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32 0x7A
-
-#define ENCODER_A 14 // Drehzahlencoder Pin A
-#define ENCODER_B 27 // Drehzahlencoder Pin B
-#define ENCODER_PULS_PER_REVOLUTION 600 // Drehzahlencoder Pin B
-
-#define DIR_PIN 4
-#define STEP_PIN 2
-#define STEPPER_GEAR_RATIO 0.5f // example: 20 teath on stepper & 40 teeth on spindel is a 1/2 gear ratio
-#define MICROSTEPS_PER_REVOLUTION 400
-#define SPINDEL_THREAD_PITCH 1.5f // value in mm
-#define MINIMUM_STEP_PULS_WIDTH 4 // in µs will result in speed -> less torque
-#define THRESHOLD 0.001f
-#define MAX_MOTOR_SPEED 1200 // Höchstgeschwindigkeit
-#define SINGLE_STEP ((SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO) / MICROSTEPS_PER_REVOLUTION)
-
-// Buttons
-#define BUTTON_ADD_PIN 23
-#define BUTTON_ADD_INDEX 0
-
-#define BUTTON_REMOVE_PIN 18
-#define BUTTON_REMOVE_INDEX 1
-
-#define BUTTON_TARGET_PIN 13
-#define BUTTON_TARGET_INDEX 2
-
-#define BUTTON_POSITION_PIN 17
-#define BUTTON_POSITION_INDEX 3
-
-#define BUTTON_JOG_LEFT_PIN 33
-#define BUTTON_JOG_RIGHT_PIN 35
+#include "config.h"
+#include "handler/DisplayHandler.h"
 
 ButtonConfig buttonConfigs[4] = {
   ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
@@ -58,10 +24,10 @@ float jogIncreaseStep = 0.05f;
 float autoMoveToZeroMultiplier = 1.0f;
 float autoMoveIncreaseStep = 0.2f;
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
 
 LatheParameter* latheParameter  = new LatheParameter();
+DisplayHandler* displayHandler;
 
 // RPM Encoder
 ESP32Encoder encoder;
@@ -77,8 +43,6 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 // Lathe parameters
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
 bool directionChanged = false;
-float stepperPosition = 0.0f; // in mm
-float stepperTarget = NAN; // in mm
 unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
@@ -97,10 +61,7 @@ float encoderDeg = 0; // Winkel des encoders;
 // #################################################################################
 
 void secondCoreTask( void * parameter) {
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
+  displayHandler = new DisplayHandler();
 
   pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
   pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
@@ -179,10 +140,10 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
     case recognizedLong:
-    if (isnan(stepperTarget)) {
-        stepperTarget = stepperPosition;
+    if (isnan(latheParameter->stepperTarget())) {
+        latheParameter->setStepperTarget(latheParameter->stepperPosition());
       } else {
-        stepperTarget = NAN;
+        latheParameter->setStepperTarget(NAN);
       }
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
@@ -200,7 +161,7 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
     case recognizedLong:
-      stepperPosition = 0.0f;
+      latheParameter->setStepperPosition(0.0f);
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
       
       break;
@@ -236,67 +197,7 @@ void secondCoreTask( void * parameter) {
       jogCurrentSpeedMultiplier = 1.0f;
     }
 
-    String spindelState;
-    if (latheParameter->isSpindelEnabled()) {
-      if (!latheParameter->isSpindelInSync()) {
-        spindelState = "Syncing";
-      } else {
-        spindelState = "On";
-      }
-    } else {
-      spindelState = "Off";
-    }
-
-
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    switch (latheParameter->settingMode()) {
-      case SettingModeNone: {// Operation mode
-        display.setTextSize(2);
-        display.println("RPM " + String(latheParameter->rpm()));
-        display.setTextSize(1);
-        display.println("Max " + String(latheParameter->maxRpm()));
-
-        String feedName = latheParameter->spindlePitch().name;
-        display.println("Feed " + String(feedName + " " + spindelState));
-        display.println("Degree " + String(encoderDeg));
-        if (!isnan(stepperTarget)) {
-          display.println("Target " + String(stepperTarget));
-        }
-        display.println("Position " + String(stepperPosition));
-        break;
-      }
-      case SettingModeSetting:
-        display.setTextSize(2);
-        display.println("Setting");
-        display.setTextSize(1);
-        display.println("Select an option");
-        break;
-      case SettingModeBacklash:
-        display.setTextSize(2);
-        display.println("Setting");
-        display.setTextSize(1);
-        display.println("Backlash: " + String(latheParameter->backlash()));
-        break;
-      case SettingModeMeasurementSystem: {
-        display.setTextSize(2);
-        display.println("Setting");
-        display.setTextSize(1);
-        String system = latheParameter->isMetricFeed() ? String("Metric") : String("Imperial");
-        display.println("Unit: " + system);
-        break;
-      }
-      case SettingModeInvertFeed: {
-        display.setTextSize(2);
-        display.println("Setting");
-        display.setTextSize(1);
-        String isInverted = latheParameter->isInvertFeed() ? String("Yes") : String("No");
-        display.println("Invert Feed: " + isInverted);
-        break;
-      }
-    }
-    display.display();
+    displayHandler->updateDisplay(latheParameter);
 
     delay(20);
   }
@@ -370,14 +271,14 @@ bool startSingleStep(bool dir, bool isJog) {
     }
   }
 
- if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
+ if (!isnan(latheParameter->stepperTarget()) && (abs(latheParameter->stepperTarget() - latheParameter->stepperPosition()) <= THRESHOLD) && !directionChanged && !isJog) {
     Serial.println("Target reached");
     latheParameter->stopSpindel();
     return false; // Target reached!
   }
 
   // dir true = clockwise
-  stepperPosition += dir ? SINGLE_STEP : -SINGLE_STEP;
+  latheParameter->setStepperPosition(latheParameter->stepperPosition() + dir ? SINGLE_STEP : -SINGLE_STEP);
 
   updatePosition(dir);
   digitalWrite(STEP_PIN, HIGH);
@@ -460,8 +361,8 @@ void loop() {
 
   if (autoMoveToZero) {
     // Auto move to zero handler 
-    if (abs(stepperPosition) >= THRESHOLD) {
-      bool direction = stepperPosition > 0 ? false : true;
+    if (abs(latheParameter->stepperPosition()) >= THRESHOLD) {
+      bool direction = latheParameter->stepperPosition() > 0 ? false : true;
       performBlockingStep(direction, autoMoveToZeroMultiplier);
       autoMoveToZeroMultiplier = min(autoMoveToZeroMultiplier + autoMoveIncreaseStep, maxSpeedMultiplier);
     } else {

@@ -40,6 +40,11 @@ class LatheParameter {
         SettingMode settingMode();
         void setSettingMode(SettingMode value);
 
+        float stepperPosition();
+        void setStepperPosition(float value);
+        float stepperTarget();
+        void setStepperTarget(float value);
+
     private:
         int backlashValue;
         unsigned int feedIndexValue;
@@ -53,6 +58,9 @@ class LatheParameter {
         bool isSpindelInSyncValue;
 
         SettingMode settingModeValue;
+
+        float stepperPositionValue;
+        float stepperTargetValue;
 };
 
 #endif

@@ -57,6 +57,9 @@ LatheParameter::LatheParameter() {
     this->isSpindelInSyncValue = false;
 
     this->settingModeValue = SettingModeNone;
+
+    this->stepperPositionValue = 0.0f;
+    this->stepperTargetValue = NAN;
 }
 
 int LatheParameter::backlash() {
@@ -157,4 +160,18 @@ SettingMode LatheParameter::settingMode() {
 }
 void LatheParameter::setSettingMode(SettingMode value) {
     this->settingModeValue = value;
+}
+
+
+float LatheParameter::stepperPosition() {
+    return this->stepperPositionValue;
+}
+void LatheParameter::setStepperPosition(float value) {
+    this->stepperPositionValue = value;
+}
+float LatheParameter::stepperTarget() {
+    return this->stepperTargetValue;
+}
+void LatheParameter::setStepperTarget(float value) {
+    this->stepperTargetValue = value;
 }
