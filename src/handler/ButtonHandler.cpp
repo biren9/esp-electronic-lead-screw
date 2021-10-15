@@ -43,7 +43,7 @@ void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, int buttonIn
       switch (latheParameter->settingMode()) {
         case SettingModeNone: {
           unsigned int size = latheParameter->availablePitches();
-          latheParameter->setFeedIndex(min(latheParameter->feedIndex()+1, size-1));
+          latheParameter->setFeedIndex(min(latheParameter->feedIndex()+1u, size-1u));
           break;
         }
         case SettingModeBacklash:
@@ -75,9 +75,16 @@ void ButtonHandler::handleButtonRemove(LatheParameter* latheParameter, int butto
       break;
     case recognizedShort:
       switch (latheParameter->settingMode()) {
-        case SettingModeNone:
-          latheParameter->setFeedIndex(max(latheParameter->feedIndex()-1, 0u));
+        case SettingModeNone: {
+          unsigned int newIndex;
+          if (latheParameter->feedIndex() == 0u) {
+            newIndex = 0;
+          } else {
+            newIndex = latheParameter->feedIndex()-1;
+          }
+          latheParameter->setFeedIndex(newIndex);
           break;
+        }
         case SettingModeBacklash:
           latheParameter->setBacklash(max(latheParameter->backlash()-1, 0));
           break;

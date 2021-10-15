@@ -55,13 +55,13 @@ Pitch availableImperialFeeds[] = {
     Pitch::fromImperial(8)
 };
 
-LatheParameter::LatheParameter(Preferences preferences) {
+LatheParameter::LatheParameter(Preferences* preferences) {
     this->preferences = preferences;
-    this->preferences.begin("settings", false);
-    this->backlashValue = preferences.getInt(KEY_BACKLASH, 20);
-    this->feedIndexValue = preferences.getUInt(KEY_FEED_INDEX, 0u);
-    this->metricFeedValue = preferences.getBool(KEY_METRIC_FEED, true);
-    this->invertFeedValue = preferences.getBool(KEY_INVERT_FEED, false);
+    this->preferences->begin("settings", false);
+    this->backlashValue = preferences->getInt(KEY_BACKLASH, 20);
+    this->feedIndexValue = preferences->getUInt(KEY_FEED_INDEX, 0u);
+    this->metricFeedValue = preferences->getBool(KEY_METRIC_FEED, true);
+    this->invertFeedValue = preferences->getBool(KEY_INVERT_FEED, false);
 
     this->rpmValue = 0;
     this->maxRpmValue = 0;
@@ -87,7 +87,7 @@ int LatheParameter::backlash() {
 }
 void LatheParameter::setBacklash(int value) {
     this->backlashValue = value;
-    preferences.putInt(KEY_BACKLASH, value);
+    preferences->putInt(KEY_BACKLASH, value);
 }
 
 unsigned int LatheParameter::feedIndex() {
@@ -95,7 +95,7 @@ unsigned int LatheParameter::feedIndex() {
 }
 void LatheParameter::setFeedIndex(unsigned int value) {
     this->feedIndexValue = value;
-    preferences.putUInt(KEY_FEED_INDEX, value);
+    preferences->putUInt(KEY_FEED_INDEX, value);
 }
 
 bool LatheParameter::isMetricFeed() {
@@ -103,7 +103,7 @@ bool LatheParameter::isMetricFeed() {
 }
 void LatheParameter::setMetricFeed(bool value) {
     this->metricFeedValue = value;
-    preferences.putBool(KEY_METRIC_FEED, value);
+    preferences->putBool(KEY_METRIC_FEED, value);
 }
 
 bool LatheParameter::isInvertFeed() {
@@ -111,7 +111,7 @@ bool LatheParameter::isInvertFeed() {
 }
 void LatheParameter::setInvertFeed(bool value) {
     this->invertFeedValue = value;
-    preferences.putBool(KEY_INVERT_FEED, value);
+    preferences->putBool(KEY_INVERT_FEED, value);
 }
 
 

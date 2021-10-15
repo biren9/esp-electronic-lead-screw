@@ -150,7 +150,7 @@ void performBlockingStep(bool direction, float multiplier) {
 
 void setup() {
   Serial.begin(115200);
-  latheParameter = new LatheParameter(preferences);
+  latheParameter = new LatheParameter(&preferences);
   ESP32Encoder::useInternalWeakPullResistors = UP;
   encoder.attachFullQuad(ENCODER_A, ENCODER_B);
   encoder.clearCount();

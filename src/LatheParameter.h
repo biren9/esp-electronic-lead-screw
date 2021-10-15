@@ -8,7 +8,7 @@
 class LatheParameter {
 
     public:
-        LatheParameter(Preferences preferences);
+        LatheParameter(Preferences* preferences);
 
         // Persisted
         int backlash();
@@ -60,7 +60,7 @@ class LatheParameter {
         void setAutoMoveToZeroMultiplier(float value);
 
     private:
-        Preferences preferences;
+        Preferences* preferences;
         int backlashValue;
         unsigned int feedIndexValue;
         bool metricFeedValue;
