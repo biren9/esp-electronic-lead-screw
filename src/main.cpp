@@ -27,7 +27,6 @@ int64_t encoderLastSteps = 0; // Tempvariable für encoderDoSteps
 float encoderLastStepsFrac = 0.0f;
 
 // RPM
-int rpmMillisMeasure = 500; // Messzeit für UPM in Millisekunden
 int rpmMillisTemp = 0; // Tempspeicher für millis
 
 // Lathe parameters
@@ -54,7 +53,6 @@ void secondCoreTask( void * parameter) {
   for(;;) {
     buttonHandler->handleButtons(latheParameter);
     displayHandler->updateDisplay(latheParameter);
-
     delay(20);
   }
 }
@@ -113,7 +111,6 @@ bool startSingleStep(bool dir, bool isJog) {
     if ((int)encoderDeg <= 5) {
       latheParameter->setSpindelInSync();
       Serial.println("Spindle in sync!");
-      // Spindel in sync
     } else {
       Serial.println((int)encoderDeg);
       encoderLastSteps = encoder.getCount();
@@ -178,10 +175,10 @@ void loop() {
   latheParameter->setMaxRpm(abs((MAX_MOTOR_SPEED * 60) / ((latheParameter->spindlePitch().metricFeed / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200)));
 
   // calculate rpm
-  if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
+  if (millis() >= rpmMillisTemp + RPM_MEASUREMENT_TIME_MILLIS) {
     latheParameter->setRpm((abs(encoderAct - encoderLastUpm) * 60000 / (millis() - rpmMillisTemp)) / (ENCODER_PULS_PER_REVOLUTION * 4));
     encoderLastUpm = encoderAct;
-    rpmMillisTemp = rpmMillisTemp + rpmMillisMeasure;
+    rpmMillisTemp += RPM_MEASUREMENT_TIME_MILLIS;
 
     // Stop the spindel if we are running to fast.
     if (latheParameter->rpm() > latheParameter->maxRpm()) {
