@@ -12,9 +12,6 @@
 #include "handler/DisplayHandler.h"
 #include "handler/ButtonHandler.h"
 
-float jogIncreaseStep = 0.05f;
-float autoMoveIncreaseStep = 0.2f;
-
 TaskHandle_t userInterfaceTask;
 
 Preferences preferences;
@@ -35,11 +32,10 @@ int rpmMillisTemp = 0; // Tempspeicher für millis
 
 // Lathe parameters
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
-bool directionChanged = false;
 unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
-float stepsToDoLater = 0.0f;
+bool directionChanged = false;
 
 // Degree calculation
 int64_t encoderAbs=0;
@@ -219,7 +215,7 @@ void loop() {
     if (abs(latheParameter->stepperPosition()) >= THRESHOLD) {
       bool direction = latheParameter->stepperPosition() > 0 ? false : true;
       performBlockingStep(direction, latheParameter->autoMoveToZeroMultiplier());
-      latheParameter->setAutoMoveToZeroMultiplier(min(latheParameter->autoMoveToZeroMultiplier() + autoMoveIncreaseStep, MAX_SPEED_MULTIPLIER));
+      latheParameter->setAutoMoveToZeroMultiplier(min(latheParameter->autoMoveToZeroMultiplier() + AUTO_MOVE_INCREASE_STEP, MAX_SPEED_MULTIPLIER));
     } else {
       latheParameter->setAutoMoveToZeroMultiplier(1.0f);
       latheParameter->setAutoMoveToZero(false);
@@ -228,7 +224,7 @@ void loop() {
     // Jog handler 
     bool direction = latheParameter->currentJogMode() == left ? true : false;
     performBlockingStep(direction, latheParameter->jogCurrentSpeedMultiplier());
-    latheParameter->setJogCurrentSpeedMultiplier(min(latheParameter->jogCurrentSpeedMultiplier() + jogIncreaseStep, MAX_SPEED_MULTIPLIER));
+    latheParameter->setJogCurrentSpeedMultiplier(min(latheParameter->jogCurrentSpeedMultiplier() + JOG_INCREASE_STEP, MAX_SPEED_MULTIPLIER));
   } else {
     // Spindle step handler
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
