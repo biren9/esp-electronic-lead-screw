@@ -5,11 +5,11 @@ struct Pitch {
     float metricFeed;
 
     static Pitch fromMetric(float pitch) {
-        return Pitch{String(pitch)+"mm", pitch};
+        return Pitch{String(pitch)+" mm", pitch};
     }
 
     static Pitch fromImperial(uint8_t tpi) {
-        return Pitch{String(tpi)+"TPI", 25.4f/(float)tpi};
+        return Pitch{String(tpi)+" TPI", 25.4f/(float)tpi};
     }
 };
 

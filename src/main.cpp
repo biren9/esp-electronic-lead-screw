@@ -73,10 +73,8 @@ int64_t encoderLastSteps = 0; // Tempvariable für encoderDoSteps
 float encoderLastStepsFrac = 0.0f;
 
 // RPM
-int rpm = 0; // Umdrehung pro Minute
 int rpmMillisMeasure = 500; // Messzeit für UPM in Millisekunden
 int rpmMillisTemp = 0; // Tempspeicher für millis
-int maxRpm = 0; // maximale, fehlerfreie UPM für Drehbank. Wird errechnet aus dem Vorschub
 
 // Lathe parameters
 float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte pro Drehschritt (errechnet sich aus stepper Steps, threadPitch und spindleMmPerRound)
@@ -292,9 +290,9 @@ void secondCoreTask( void * parameter) {
     switch (settingMode) {
       case SettingModeNone: {// Operation mode
         display.setTextSize(2);
-        display.println("RPM " + String(rpm));
+        display.println("RPM " + String(latheParameter->rpm()));
         display.setTextSize(1);
-        display.println("Max " + String(maxRpm));
+        display.println("Max " + String(latheParameter->maxRpm()));
 
         String feedName;
         int feedIndex = latheParameter->feedIndex();
@@ -467,16 +465,16 @@ void loop() {
   stepperStepsPerEncoderSteps = ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO / MICROSTEPS_PER_REVOLUTION))) / (ENCODER_PULS_PER_REVOLUTION * 4);
 
   // max RPM calculation
-  maxRpm = abs((MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200));
+  latheParameter->setMaxRpm(abs((MAX_MOTOR_SPEED * 60) / ((spindleMmPerRound() / (SPINDEL_THREAD_PITCH * STEPPER_GEAR_RATIO)) * 200)));
 
   // calculate rpm
   if (millis() >= rpmMillisTemp + rpmMillisMeasure) {
-    rpm = (abs(encoderAct - encoderLastUpm) * 60000 / (millis() - rpmMillisTemp)) / (ENCODER_PULS_PER_REVOLUTION * 4);
+    latheParameter->setRpm((abs(encoderAct - encoderLastUpm) * 60000 / (millis() - rpmMillisTemp)) / (ENCODER_PULS_PER_REVOLUTION * 4));
     encoderLastUpm = encoderAct;
     rpmMillisTemp = rpmMillisTemp + rpmMillisMeasure;
 
     // Stop the spindel if we are running to fast.
-    if (rpm > maxRpm) {
+    if (latheParameter->rpm() > latheParameter->maxRpm()) {
       stopSpindel();
     }
   }

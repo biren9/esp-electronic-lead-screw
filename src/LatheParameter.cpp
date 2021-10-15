@@ -14,6 +14,9 @@ LatheParameter::LatheParameter() {
     this->feedIndexValue = preferences.getInt(KEY_FEED_INDEX, 0);
     this->metricFeedValue = preferences.getBool(KEY_METRIC_FEED, true);
     this->invertFeedValue = preferences.getBool(KEY_INVERT_FEED, false);
+
+    this->rpmValue = 0;
+    this->maxRpmValue = 0;
 }
 
 int LatheParameter::backlash() {
@@ -46,4 +49,19 @@ bool LatheParameter::isInvertFeed() {
 void LatheParameter::setInvertFeed(bool value) {
     this->invertFeedValue = value;
     preferences.putBool(KEY_INVERT_FEED, value);
+}
+
+
+int LatheParameter::rpm() {
+    return this->rpmValue;
+}
+int LatheParameter::maxRpm() {
+    return this->maxRpmValue;
+}
+
+void LatheParameter::setRpm(int value) {
+    this->rpmValue = value;
+}
+void LatheParameter::setMaxRpm(int value) {
+    this->maxRpmValue = value;
 }
