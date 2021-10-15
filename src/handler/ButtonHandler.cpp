@@ -2,11 +2,13 @@
 #include "config.h"
 #include "Button.h"
 
-ButtonConfig buttonConfigs[4] = {
+ButtonConfig buttonConfigs[] = {
   ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
   ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
   ButtonConfig{BUTTON_TARGET_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0}
+  ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_JOG_LEFT_PIN, readyToTrigger, 0, 0},
+  ButtonConfig{BUTTON_JOG_RIGHT_PIN, readyToTrigger, 0, 0},
 };
 
 int8_t maxCounter = 5;
@@ -21,15 +23,15 @@ ButtonHandler::ButtonHandler() {
 }
 
 void ButtonHandler::handleButtons(LatheParameter* latheParameter) {
-    this->handleButtonAdd(latheParameter, BUTTON_ADD_INDEX);
-    this->handleButtonRemove(latheParameter, BUTTON_REMOVE_INDEX);
-    this->handleButtonTarget(latheParameter, BUTTON_TARGET_INDEX);
-    this->handleButtonPosition(latheParameter, BUTTON_POSITION_INDEX);
-    this->handleButtonJog(latheParameter, BUTTON_JOG_LEFT_PIN, BUTTON_JOG_RIGHT_PIN);
+    this->handleButtonAdd(latheParameter, &buttonConfigs[0]);
+    this->handleButtonRemove(latheParameter, &buttonConfigs[1]);
+    this->handleButtonTarget(latheParameter, &buttonConfigs[2]);
+    this->handleButtonPosition(latheParameter, &buttonConfigs[3]);
+    this->handleButtonJog(latheParameter, &buttonConfigs[4], &buttonConfigs[5]);
 }
 
-void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, int buttonIndex) {
-    switch (Button::checkButtonState(&buttonConfigs[buttonIndex])) {
+void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, ButtonConfig* button) {
+    switch (Button::checkButtonState(button)) {
     case recognizedLong:
       if (latheParameter->settingMode() == SettingModeNone) {
         latheParameter->stopSpindel();
@@ -37,7 +39,7 @@ void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, int buttonIn
       } else {
         latheParameter->setSettingMode(Setting::next(latheParameter->settingMode()));
       }
-      buttonConfigs[buttonIndex].handledAndAcceptMoreLong();
+      button->handledAndAcceptMoreLong();
       break;
     case recognizedShort: {
       switch (latheParameter->settingMode()) {
@@ -59,7 +61,7 @@ void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, int buttonIn
         default:
           break;
       }
-      buttonConfigs[buttonIndex].handled();
+      button->handled();
       break;
     }
     default:
@@ -67,11 +69,11 @@ void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, int buttonIn
     }
 }
 
-void ButtonHandler::handleButtonRemove(LatheParameter* latheParameter, int buttonIndex) {
-    switch (Button::checkButtonState(&buttonConfigs[buttonIndex])) {
+void ButtonHandler::handleButtonRemove(LatheParameter* latheParameter, ButtonConfig* button) {
+    switch (Button::checkButtonState(button)) {
     case recognizedLong:
       latheParameter->setSettingMode(SettingModeNone);
-      buttonConfigs[buttonIndex].handled();
+      button->handled();
       break;
     case recognizedShort:
       switch (latheParameter->settingMode()) {
@@ -98,22 +100,22 @@ void ButtonHandler::handleButtonRemove(LatheParameter* latheParameter, int butto
         default:
           break;
       }
-      buttonConfigs[buttonIndex].handled();
+      button->handled();
       break;
     default:
       break;
     }
 }
 
-void ButtonHandler::handleButtonTarget(LatheParameter* latheParameter, int buttonIndex) {
-switch (Button::checkButtonState(&buttonConfigs[buttonIndex])) {
+void ButtonHandler::handleButtonTarget(LatheParameter* latheParameter, ButtonConfig* button) {
+switch (Button::checkButtonState(button)) {
     case recognizedLong:
     if (isnan(latheParameter->stepperTarget())) {
         latheParameter->setStepperTarget(latheParameter->stepperPosition());
       } else {
         latheParameter->setStepperTarget(NAN);
       }
-      buttonConfigs[buttonIndex].handled();
+      button->handled();
       break;
     case recognizedShort:
       if (latheParameter->isSpindelEnabled()) {
@@ -121,33 +123,32 @@ switch (Button::checkButtonState(&buttonConfigs[buttonIndex])) {
       } else {
         latheParameter->startSpindel();
       }
-      buttonConfigs[buttonIndex].handled();
+      button->handled();
       break;
     default:
       break;
     }
 }
 
-void ButtonHandler::handleButtonPosition(LatheParameter* latheParameter, int buttonIndex) {
-    switch (Button::checkButtonState(&buttonConfigs[buttonIndex])) {
+void ButtonHandler::handleButtonPosition(LatheParameter* latheParameter, ButtonConfig* button) {
+    switch (Button::checkButtonState(button)) {
     case recognizedLong:
       latheParameter->setStepperPosition(0.0f);
-      buttonConfigs[buttonIndex].handled();
-      
+      button->handled();
       break;
     case recognizedShort:
       latheParameter->stopSpindel();
       latheParameter->setAutoMoveToZeroMultiplier(1.0f);
       latheParameter->setAutoMoveToZero(!latheParameter->isAutoMoveToZero());
-      buttonConfigs[buttonIndex].handled();
+      button->handled();
       break;
     default:
       break;
     }
 }
 
-void ButtonHandler::handleButtonJog(LatheParameter* latheParameter, int buttonLeftPin, int buttonRightPin) {
-    if (digitalRead(buttonLeftPin) == LOW) {
+void ButtonHandler::handleButtonJog(LatheParameter* latheParameter, ButtonConfig* buttonLeft, ButtonConfig* buttonRight) {
+    if (digitalRead(buttonLeft->pin) == LOW) {
       latheParameter->setJogReadCounter(max(latheParameter->jogReadCounter()-1, -maxCounter));
       if (latheParameter->currentJogMode() != left && latheParameter->jogReadCounter() == -maxCounter) {
         latheParameter->setJogCurrentSpeedMultiplier(1.0f);
@@ -155,7 +156,7 @@ void ButtonHandler::handleButtonJog(LatheParameter* latheParameter, int buttonLe
       }
     
       latheParameter->stopSpindel();
-    } else if (digitalRead(buttonRightPin) == LOW) {
+    } else if (digitalRead(buttonRight->pin) == LOW) {
       latheParameter->setJogReadCounter(min(latheParameter->jogReadCounter()+1, -maxCounter));
       if (latheParameter->currentJogMode() != right && latheParameter->jogReadCounter() <= maxCounter) {
         latheParameter->setJogCurrentSpeedMultiplier(1.0f);

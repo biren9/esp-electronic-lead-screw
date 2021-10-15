@@ -7,6 +7,9 @@ class DisplayHandler {
     public:
         DisplayHandler();
         void updateDisplay(LatheParameter* latheParameter);
+
+    private:
+        String spindelState(LatheParameter* latheParameter);
 };
 
 #endif

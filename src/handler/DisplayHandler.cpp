@@ -12,18 +12,6 @@ DisplayHandler::DisplayHandler() {
 }
 
 void DisplayHandler::updateDisplay(LatheParameter* latheParameter) {
-    String spindelState;
-    if (latheParameter->isSpindelEnabled()) {
-      if (!latheParameter->isSpindelInSync()) {
-        spindelState = "Syncing";
-      } else {
-        spindelState = "On";
-      }
-    } else {
-      spindelState = "Off";
-    }
-
-
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0,0);
@@ -35,7 +23,7 @@ void DisplayHandler::updateDisplay(LatheParameter* latheParameter) {
         display.println("Max " + String(latheParameter->maxRpm()));
 
         String feedName = latheParameter->spindlePitch().name;
-        display.println("Feed " + String(feedName + " " + spindelState));
+        display.println("Feed " + String(feedName + " " + this->spindelState(latheParameter)));
         //display.println("Degree " + String(encoderDeg));
         if (!isnan(latheParameter->stepperTarget())) {
           display.println("Target " + String(latheParameter->stepperTarget()));
@@ -73,4 +61,16 @@ void DisplayHandler::updateDisplay(LatheParameter* latheParameter) {
       }
     }
     display.display();
+}
+
+String DisplayHandler::spindelState(LatheParameter* latheParameter) {
+    if (latheParameter->isSpindelEnabled()) {
+      if (!latheParameter->isSpindelInSync()) {
+        return "Syncing";
+      } else {
+        return "On";
+      }
+    } else {
+      return "Off";
+    }
 }
