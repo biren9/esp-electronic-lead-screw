@@ -25,6 +25,9 @@
 
 #define RPM_MEASUREMENT_TIME_MILLIS 500
 
+#define VERSION String("Beta-1")
+#define BUILD_DATE String(__DATE__) + " " + String(__TIME__)
+
 // Buttons
 #define BUTTON_ADD_PIN 23
 #define BUTTON_REMOVE_PIN 18

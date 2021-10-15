@@ -35,7 +35,9 @@ void DisplayHandler::updateDisplay(LatheParameter* latheParameter) {
         display.setTextSize(2);
         display.println("Setting");
         display.setTextSize(1);
-        display.println("Select an option");
+        display.println("Author: Gil Biren");
+        display.println("Version: " + VERSION);
+        display.println("Compile date: " + BUILD_DATE);
         break;
       case SettingModeBacklash:
         display.setTextSize(2);
