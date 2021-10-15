@@ -62,7 +62,6 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 TaskHandle_t userInterfaceTask;
 
 LatheParameter* latheParameter  = new LatheParameter();
-SettingMode settingMode = SettingModeNone;
 
 // RPM Encoder
 ESP32Encoder encoder;
@@ -80,29 +79,16 @@ float stepperStepsPerEncoderSteps = 0.0f; // Leitspindel Schrittmotor Schritte p
 bool directionChanged = false;
 float stepperPosition = 0.0f; // in mm
 float stepperTarget = NAN; // in mm
-bool waitToSyncSpindel = false;
 unsigned long lastStepTime = 0;
 bool stepPinIsOn = false;
 bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 float stepsToDoLater = 0.0f;
-bool isSpindelEnabled = false;
 bool autoMoveToZero = false;
 int8_t jogReadCounter = 0;
 
 // Degree calculation
 int64_t encoderAbs=0;
 float encoderDeg = 0; // Winkel des encoders;
-
-void startSpindel() {
-  if (settingMode == SettingModeNone) {
-    waitToSyncSpindel = true;
-    isSpindelEnabled = true;
-  }
-}
-
-void stopSpindel() {
-  isSpindelEnabled = false;
-}
 
 // #################################################################################
 // ### 
@@ -127,16 +113,16 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
     case recognizedLong:
-      if (settingMode == SettingModeNone) {
-        stopSpindel();
-        settingMode = SettingModeSetting;
+      if (latheParameter->settingMode() == SettingModeNone) {
+        latheParameter->stopSpindel();
+        latheParameter->setSettingMode(SettingModeSetting);
       } else {
-        settingMode = Setting::next(settingMode);
+        latheParameter->setSettingMode(Setting::next(latheParameter->settingMode()));
       }
       buttonConfigs[BUTTON_ADD_INDEX].handledAndAcceptMoreLong();
       break;
     case recognizedShort: {
-      switch (settingMode) {
+      switch (latheParameter->settingMode()) {
         case SettingModeNone: {
           unsigned int size = latheParameter->availablePitches();
           latheParameter->setFeedIndex(min(latheParameter->feedIndex()+1, size-1));
@@ -164,11 +150,11 @@ void secondCoreTask( void * parameter) {
 
     switch (Button::checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
     case recognizedLong:
-      settingMode = SettingModeNone;
+      latheParameter->setSettingMode(SettingModeNone);
       buttonConfigs[BUTTON_REMOVE_INDEX].handled();
       break;
     case recognizedShort:
-      switch (settingMode) {
+      switch (latheParameter->settingMode()) {
         case SettingModeNone:
           latheParameter->setFeedIndex(max(latheParameter->feedIndex()-1, 0u));
           break;
@@ -201,10 +187,10 @@ void secondCoreTask( void * parameter) {
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
     case recognizedShort:
-      if (isSpindelEnabled) {
-        stopSpindel();
+      if (latheParameter->isSpindelEnabled()) {
+        latheParameter->stopSpindel();
       } else {
-        startSpindel();
+        latheParameter->startSpindel();
       }
       buttonConfigs[BUTTON_TARGET_INDEX].handled();
       break;
@@ -219,7 +205,7 @@ void secondCoreTask( void * parameter) {
       
       break;
     case recognizedShort:
-      stopSpindel();
+      latheParameter->stopSpindel();
       autoMoveToZeroMultiplier = 1.0f;
       autoMoveToZero = !autoMoveToZero;
       buttonConfigs[BUTTON_POSITION_INDEX].handled();
@@ -236,14 +222,14 @@ void secondCoreTask( void * parameter) {
         currentJogMode = left;
       }
     
-      stopSpindel();
+      latheParameter->stopSpindel();
     } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
       jogReadCounter = min(jogReadCounter+1, -maxCounter);
       if (currentJogMode != right && jogReadCounter <= maxCounter) {
         jogCurrentSpeedMultiplier = 1.0f;
         currentJogMode = right;
       }
-      stopSpindel();
+      latheParameter->stopSpindel();
     } else {
       jogReadCounter = 0;
       currentJogMode = neutral;
@@ -251,8 +237,8 @@ void secondCoreTask( void * parameter) {
     }
 
     String spindelState;
-    if (isSpindelEnabled) {
-      if (waitToSyncSpindel) {
+    if (latheParameter->isSpindelEnabled()) {
+      if (!latheParameter->isSpindelInSync()) {
         spindelState = "Syncing";
       } else {
         spindelState = "On";
@@ -265,7 +251,7 @@ void secondCoreTask( void * parameter) {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0,0);
-    switch (settingMode) {
+    switch (latheParameter->settingMode()) {
       case SettingModeNone: {// Operation mode
         display.setTextSize(2);
         display.println("RPM " + String(latheParameter->rpm()));
@@ -366,14 +352,15 @@ bool startSingleStep(bool dir, bool isJog) {
     }
   }
 
-  if (directionChanged && !waitToSyncSpindel && !isJog) {
-    waitToSyncSpindel = true;
-    Serial.println("Start syncing spindle...");
-  }
+/* Actual this shouldn't be necessary */
+  // if (directionChanged && !waitToSyncSpindel && !isJog) {
+  //   waitToSyncSpindel = true;
+  //   Serial.println("Start syncing spindle...");
+  // }
 
-  if (waitToSyncSpindel) {
+  if (!latheParameter->isSpindelInSync()) {
     if ((int)encoderDeg <= 5) {
-      waitToSyncSpindel = false;
+      latheParameter->setSpindelInSync();
       Serial.println("Spindle in sync!");
       // Spindel in sync
     } else {
@@ -385,7 +372,7 @@ bool startSingleStep(bool dir, bool isJog) {
 
  if (!isnan(stepperTarget) && (abs(stepperTarget - stepperPosition) <= THRESHOLD) && !directionChanged && !isJog) {
     Serial.println("Target reached");
-    stopSpindel();
+    latheParameter->stopSpindel();
     return false; // Target reached!
   }
 
@@ -446,7 +433,7 @@ void loop() {
 
     // Stop the spindel if we are running to fast.
     if (latheParameter->rpm() > latheParameter->maxRpm()) {
-      stopSpindel();
+      latheParameter->stopSpindel();
     }
   }
 
@@ -460,7 +447,7 @@ void loop() {
   int encoderActDifference = encoderAct - encoderLastSteps;
   int stepsToDo = encoderActDifference * stepperStepsPerEncoderSteps;
 
-  switch (settingMode) {
+  switch (latheParameter->settingMode()) {
     case SettingModeBacklash:
       startSingleStep(true, true);
       delay(250);
@@ -491,7 +478,7 @@ void loop() {
     if (abs(stepsToDo) >= 1 && !stepPinIsOn) {
       bool direction = stepsToDo > 0;
 
-      if (isSpindelEnabled) {
+      if (latheParameter->isSpindelEnabled()) {
         stepPinIsOn = startSingleStep(direction, false);
         if (stepPinIsOn) {
           lastStepTime = micros();

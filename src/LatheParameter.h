@@ -1,6 +1,7 @@
 #ifndef __LatheParameter_h_
 #define __LatheParameter_h_
 #include "Pitch.h"
+#include "Setting.h"
 
 class LatheParameter {
 
@@ -30,6 +31,15 @@ class LatheParameter {
         Pitch spindlePitch();
         unsigned int availablePitches();
 
+        void startSpindel();
+        void stopSpindel();
+        bool isSpindelEnabled();
+        bool isSpindelInSync();
+        void setSpindelInSync();
+
+        SettingMode settingMode();
+        void setSettingMode(SettingMode value);
+
     private:
         int backlashValue;
         unsigned int feedIndexValue;
@@ -38,6 +48,11 @@ class LatheParameter {
 
         int rpmValue;
         int maxRpmValue;
+
+        bool isSpindelEnabledValue;
+        bool isSpindelInSyncValue;
+
+        SettingMode settingModeValue;
 };
 
 #endif

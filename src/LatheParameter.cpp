@@ -52,6 +52,11 @@ LatheParameter::LatheParameter() {
 
     this->rpmValue = 0;
     this->maxRpmValue = 0;
+
+    this->isSpindelEnabledValue = false;
+    this->isSpindelInSyncValue = false;
+
+    this->settingModeValue = SettingModeNone;
 }
 
 int LatheParameter::backlash() {
@@ -122,4 +127,34 @@ unsigned int LatheParameter::availablePitches() {
     } else {
         return sizeof(availableImperialFeeds) / sizeof(Pitch);
     }
+}
+
+
+void LatheParameter::startSpindel() {
+  if (this->settingModeValue == SettingModeNone) {
+    this->isSpindelEnabledValue = true;
+  }
+}
+
+void LatheParameter::stopSpindel() {
+  this->isSpindelEnabledValue = false;
+  this->isSpindelInSyncValue = false;
+}
+
+bool LatheParameter::isSpindelEnabled() {
+    return this->isSpindelEnabledValue;
+}
+bool LatheParameter::isSpindelInSync() {
+    return this->isSpindelInSyncValue;
+}
+void LatheParameter::setSpindelInSync() {
+    this->isSpindelInSyncValue = true;
+}
+
+
+SettingMode LatheParameter::settingMode() {
+    return this->settingModeValue;
+}
+void LatheParameter::setSettingMode(SettingMode value) {
+    this->settingModeValue = value;
 }
