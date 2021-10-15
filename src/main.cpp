@@ -9,13 +9,7 @@
 #include "Setting.h"
 #include "config.h"
 #include "handler/DisplayHandler.h"
-
-ButtonConfig buttonConfigs[4] = {
-  ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_TARGET_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0}
-};
+#include "handler/ButtonHandler.h"
 
 float jogIncreaseStep = 0.05f;
 float autoMoveIncreaseStep = 0.2f;
@@ -24,6 +18,7 @@ TaskHandle_t userInterfaceTask;
 
 LatheParameter* latheParameter  = new LatheParameter();
 DisplayHandler* displayHandler;
+ButtonHandler* buttonHandler;
 
 // RPM Encoder
 ESP32Encoder encoder;
@@ -56,141 +51,10 @@ float encoderDeg = 0; // Winkel des encoders;
 
 void secondCoreTask( void * parameter) {
   displayHandler = new DisplayHandler();
-
-  pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_TARGET_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_POSITION_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_JOG_LEFT_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_JOG_RIGHT_PIN, INPUT_PULLUP);
+  buttonHandler = new ButtonHandler();
 
   for(;;) {
-
-    switch (Button::checkButtonState(&buttonConfigs[BUTTON_ADD_INDEX])) {
-    case recognizedLong:
-      if (latheParameter->settingMode() == SettingModeNone) {
-        latheParameter->stopSpindel();
-        latheParameter->setSettingMode(SettingModeSetting);
-      } else {
-        latheParameter->setSettingMode(Setting::next(latheParameter->settingMode()));
-      }
-      buttonConfigs[BUTTON_ADD_INDEX].handledAndAcceptMoreLong();
-      break;
-    case recognizedShort: {
-      switch (latheParameter->settingMode()) {
-        case SettingModeNone: {
-          unsigned int size = latheParameter->availablePitches();
-          latheParameter->setFeedIndex(min(latheParameter->feedIndex()+1, size-1));
-          break;
-        }
-        case SettingModeBacklash:
-          latheParameter->setBacklash(latheParameter->backlash()+1);
-          break;
-        case SettingModeMeasurementSystem:
-          latheParameter->setMetricFeed(!latheParameter->isMetricFeed());
-          latheParameter->setFeedIndex(0);
-          break;
-        case SettingModeInvertFeed:
-          latheParameter->setInvertFeed(!latheParameter->isInvertFeed());
-          break;
-        default:
-          break;
-      }
-      buttonConfigs[BUTTON_ADD_INDEX].handled();
-      break;
-    }
-    default:
-      break;
-    }
-
-    switch (Button::checkButtonState(&buttonConfigs[BUTTON_REMOVE_INDEX])) {
-    case recognizedLong:
-      latheParameter->setSettingMode(SettingModeNone);
-      buttonConfigs[BUTTON_REMOVE_INDEX].handled();
-      break;
-    case recognizedShort:
-      switch (latheParameter->settingMode()) {
-        case SettingModeNone:
-          latheParameter->setFeedIndex(max(latheParameter->feedIndex()-1, 0u));
-          break;
-        case SettingModeBacklash:
-          latheParameter->setBacklash(max(latheParameter->backlash()-1, 0));
-          break;
-        case SettingModeMeasurementSystem:
-          latheParameter->setMetricFeed(!latheParameter->isMetricFeed());
-          latheParameter->setFeedIndex(0);
-          break;
-        case SettingModeInvertFeed:
-          latheParameter->setInvertFeed(!latheParameter->isInvertFeed());
-          break;
-        default:
-          break;
-      }
-      buttonConfigs[BUTTON_REMOVE_INDEX].handled();
-      break;
-    default:
-      break;
-    }
-
-    switch (Button::checkButtonState(&buttonConfigs[BUTTON_TARGET_INDEX])) {
-    case recognizedLong:
-    if (isnan(latheParameter->stepperTarget())) {
-        latheParameter->setStepperTarget(latheParameter->stepperPosition());
-      } else {
-        latheParameter->setStepperTarget(NAN);
-      }
-      buttonConfigs[BUTTON_TARGET_INDEX].handled();
-      break;
-    case recognizedShort:
-      if (latheParameter->isSpindelEnabled()) {
-        latheParameter->stopSpindel();
-      } else {
-        latheParameter->startSpindel();
-      }
-      buttonConfigs[BUTTON_TARGET_INDEX].handled();
-      break;
-    default:
-      break;
-    }
-
-    switch (Button::checkButtonState(&buttonConfigs[BUTTON_POSITION_INDEX])) {
-    case recognizedLong:
-      latheParameter->setStepperPosition(0.0f);
-      buttonConfigs[BUTTON_POSITION_INDEX].handled();
-      
-      break;
-    case recognizedShort:
-      latheParameter->stopSpindel();
-      latheParameter->setAutoMoveToZeroMultiplier(1.0f);
-      latheParameter->setAutoMoveToZero(latheParameter->isAutoMoveToZero());
-      buttonConfigs[BUTTON_POSITION_INDEX].handled();
-      break;
-    default:
-      break;
-    }
-
-    int8_t maxCounter = 5;
-    if (digitalRead(BUTTON_JOG_LEFT_PIN) == LOW) {
-      latheParameter->setJogReadCounter(max(latheParameter->jogReadCounter()-1, -maxCounter));
-      if (latheParameter->currentJogMode() != left && latheParameter->jogReadCounter() == -maxCounter) {
-        latheParameter->setJogCurrentSpeedMultiplier(1.0f);
-        latheParameter->setCurrentJogMode(left);
-      }
-    
-      latheParameter->stopSpindel();
-    } else if (digitalRead(BUTTON_JOG_RIGHT_PIN) == LOW) {
-      latheParameter->setJogReadCounter(min(latheParameter->jogReadCounter()+1, -maxCounter));
-      if (latheParameter->currentJogMode() != right && latheParameter->jogReadCounter() <= maxCounter) {
-        latheParameter->setJogCurrentSpeedMultiplier(1.0f);
-        latheParameter->setCurrentJogMode(right);
-      }
-      latheParameter->stopSpindel();
-    } else {
-      latheParameter->setJogReadCounter(0);
-      latheParameter->setJogCurrentSpeedMultiplier(1.0f);
-      latheParameter->setCurrentJogMode(neutral);
-    }
-
+    buttonHandler->handleButtons(latheParameter);
     displayHandler->updateDisplay(latheParameter);
 
     delay(20);
