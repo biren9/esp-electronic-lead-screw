@@ -113,12 +113,6 @@ bool startSingleStep(bool dir, bool isJog) {
     }
   }
 
-/* Actual this shouldn't be necessary */
-  // if (directionChanged && !waitToSyncSpindel && !isJog) {
-  //   waitToSyncSpindel = true;
-  //   Serial.println("Start syncing spindle...");
-  // }
-
   if (!latheParameter->isSpindelInSync() && !isJog) {
     if ((int)encoderDeg <= 5) {
       latheParameter->setSpindelInSync();
