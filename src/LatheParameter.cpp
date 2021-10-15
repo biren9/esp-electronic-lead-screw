@@ -1,52 +1,65 @@
 #include "LatheParameter.h"
-#include <Preferences.h>
 
 #define KEY_BACKLASH "backlash"
 #define KEY_FEED_INDEX "feedIndex"
 #define KEY_METRIC_FEED "metricFeed"
 #define KEY_INVERT_FEED "invertFeed"
 
-Preferences preferences;
-
 Pitch availableMetricFeeds[] = {
-  Pitch::fromMetric(0.02f),
-  Pitch::fromMetric(0.05f),
-  Pitch::fromMetric(0.1f),
-  Pitch::fromMetric(0.15f),
-  Pitch::fromMetric(0.2f),
-  Pitch::fromMetric(0.25f),
-  Pitch::fromMetric(0.3f),
-  Pitch::fromMetric(0.5f),
-  Pitch::fromMetric(0.75f),
-  Pitch::fromMetric(0.8f),
-  Pitch::fromMetric(1.0f),
-  Pitch::fromMetric(1.25f),
-  Pitch::fromMetric(1.5f),
-  Pitch::fromMetric(2.0f),
-  Pitch::fromMetric(2.5f)
+    Pitch::fromMetric(0.02f),
+    Pitch::fromMetric(0.05f),
+    Pitch::fromMetric(0.1f),
+    Pitch::fromMetric(0.15f),
+    Pitch::fromMetric(0.2f),
+    Pitch::fromMetric(0.25f),
+    Pitch::fromMetric(0.3f),
+    Pitch::fromMetric(0.35f),
+    Pitch::fromMetric(0.4f),
+    Pitch::fromMetric(0.45f),
+    Pitch::fromMetric(0.5f),
+    Pitch::fromMetric(0.6f),
+    Pitch::fromMetric(0.7f),
+    Pitch::fromMetric(0.75f),
+    Pitch::fromMetric(0.8f),
+    Pitch::fromMetric(0.9f),
+    Pitch::fromMetric(1.0f),
+    Pitch::fromMetric(1.25f),
+    Pitch::fromMetric(1.5f),
+    Pitch::fromMetric(1.75f),
+    Pitch::fromMetric(2.0f),
+    Pitch::fromMetric(2.5f)
 };
 Pitch availableImperialFeeds[] = {
-  Pitch::fromImperial(48),
-  Pitch::fromImperial(40),
-  Pitch::fromImperial(32),
-  Pitch::fromImperial(28),
-  Pitch::fromImperial(24),
-  Pitch::fromImperial(20),
-  Pitch::fromImperial(18),
-  Pitch::fromImperial(16),
-  Pitch::fromImperial(14),
-  Pitch::fromImperial(13),
-  Pitch::fromImperial(12),
-  Pitch::fromImperial(11),
-  Pitch::fromImperial(10),
-  Pitch::fromImperial(9),
-  Pitch::fromImperial(8)
+    Pitch::fromImperial(62),
+    Pitch::fromImperial(60),
+    Pitch::fromImperial(48),
+    Pitch::fromImperial(40),
+    Pitch::fromImperial(36),
+    Pitch::fromImperial(32),
+    Pitch::fromImperial(30),
+    Pitch::fromImperial(28),
+    Pitch::fromImperial(26),
+    Pitch::fromImperial(25),
+    Pitch::fromImperial(24),
+    Pitch::fromImperial(22),
+    Pitch::fromImperial(20),
+    Pitch::fromImperial(19),
+    Pitch::fromImperial(18),
+    Pitch::fromImperial(16),
+    Pitch::fromImperial(14),
+    Pitch::fromImperial(13),
+    Pitch::fromImperial(12),
+    Pitch::fromImperial(11),
+    Pitch::fromImperial(10),
+    Pitch::fromImperial(9),
+    Pitch::fromImperial(8)
 };
 
-LatheParameter::LatheParameter() {
-    preferences.begin("settings", false);
+LatheParameter::LatheParameter(Preferences preferences) {
+    this->preferences = preferences;
+    this->preferences.begin("settings", false);
     this->backlashValue = preferences.getInt(KEY_BACKLASH, 20);
-    this->feedIndexValue = preferences.getInt(KEY_FEED_INDEX, 0);
+    this->feedIndexValue = preferences.getUInt(KEY_FEED_INDEX, 0u);
     this->metricFeedValue = preferences.getBool(KEY_METRIC_FEED, true);
     this->invertFeedValue = preferences.getBool(KEY_INVERT_FEED, false);
 

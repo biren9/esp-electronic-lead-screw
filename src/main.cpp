@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <ESP32Encoder.h>
+#include <Preferences.h>
 #include "LatheParameter.h"
 #include "Button.h"
 #include "JogMode.h"
@@ -16,7 +17,8 @@ float autoMoveIncreaseStep = 0.2f;
 
 TaskHandle_t userInterfaceTask;
 
-LatheParameter* latheParameter  = new LatheParameter();
+Preferences preferences;
+LatheParameter* latheParameter;
 DisplayHandler* displayHandler;
 ButtonHandler* buttonHandler;
 
@@ -117,7 +119,7 @@ bool startSingleStep(bool dir, bool isJog) {
   //   Serial.println("Start syncing spindle...");
   // }
 
-  if (!latheParameter->isSpindelInSync()) {
+  if (!latheParameter->isSpindelInSync() && !isJog) {
     if ((int)encoderDeg <= 5) {
       latheParameter->setSpindelInSync();
       Serial.println("Spindle in sync!");
@@ -136,7 +138,8 @@ bool startSingleStep(bool dir, bool isJog) {
   }
 
   // dir true = clockwise
-  latheParameter->setStepperPosition(latheParameter->stepperPosition() + dir ? SINGLE_STEP : -SINGLE_STEP);
+  float offset = dir ? SINGLE_STEP : -SINGLE_STEP;
+  latheParameter->setStepperPosition(latheParameter->stepperPosition() + offset);
 
   updatePosition(dir);
   digitalWrite(STEP_PIN, HIGH);
@@ -153,7 +156,7 @@ void performBlockingStep(bool direction, float multiplier) {
 
 void setup() {
   Serial.begin(115200);
-
+  latheParameter = new LatheParameter(preferences);
   ESP32Encoder::useInternalWeakPullResistors = UP;
   encoder.attachFullQuad(ENCODER_A, ENCODER_B);
   encoder.clearCount();

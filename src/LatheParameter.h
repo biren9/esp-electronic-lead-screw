@@ -3,11 +3,12 @@
 #include "Pitch.h"
 #include "Setting.h"
 #include "JogMode.h"
+#include <Preferences.h>
 
 class LatheParameter {
 
     public:
-        LatheParameter();
+        LatheParameter(Preferences preferences);
 
         // Persisted
         int backlash();
@@ -59,6 +60,7 @@ class LatheParameter {
         void setAutoMoveToZeroMultiplier(float value);
 
     private:
+        Preferences preferences;
         int backlashValue;
         unsigned int feedIndexValue;
         bool metricFeedValue;

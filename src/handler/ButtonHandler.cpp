@@ -131,7 +131,7 @@ void ButtonHandler::handleButtonPosition(LatheParameter* latheParameter, int but
     case recognizedShort:
       latheParameter->stopSpindel();
       latheParameter->setAutoMoveToZeroMultiplier(1.0f);
-      latheParameter->setAutoMoveToZero(latheParameter->isAutoMoveToZero());
+      latheParameter->setAutoMoveToZero(!latheParameter->isAutoMoveToZero());
       buttonConfigs[buttonIndex].handled();
       break;
     default:
