@@ -7,8 +7,8 @@ enum ButtonState { readyToTrigger, pressedDown, recognizedShort, recognizedLong,
 struct ButtonConfig { 
   int pin; 
   ButtonState state;
-  int64_t pressTime;
-  int64_t releaseTime;
+  unsigned long pressTime;
+  unsigned long releaseTime;
 
   void handled() {
     this->state = ButtonState::handled;
@@ -24,8 +24,8 @@ class Button {
         static ButtonState checkButtonState(ButtonConfig*);
 
     private:
-        static bool isLongPress(int64_t start, int64_t end);
-        static bool isShortPress(int64_t start, int64_t end);
+        static bool isLongPress(unsigned long start, unsigned long end);
+        static bool isShortPress(unsigned long start, unsigned long end);
         static void markButtonAsLongPress(ButtonConfig* button);
 };
 #endif

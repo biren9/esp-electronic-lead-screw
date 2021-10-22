@@ -1,13 +1,13 @@
 #include "Button.h"
 
-bool Button::isLongPress(int64_t start, int64_t end) {
+bool Button::isLongPress(unsigned long start, unsigned long end) {
   if (end - start >= 500) {
     return true;
   }
   return false;
 }
 
-bool Button::isShortPress(int64_t start, int64_t end) {
+bool Button::isShortPress(unsigned long start, unsigned long end) {
   if (end - start >= 50) {
     return true;
   }

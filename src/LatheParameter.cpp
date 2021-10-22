@@ -132,7 +132,7 @@ void LatheParameter::setMaxRpm(int value) {
 
 Pitch LatheParameter::spindlePitch() {
   Pitch pitch;
-  int feedIndex = this->feedIndex();
+  unsigned int feedIndex = this->feedIndex();
   if (this->isMetricFeed()) {
     pitch = availableMetricFeeds[feedIndex];
   } else {

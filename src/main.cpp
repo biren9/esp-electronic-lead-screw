@@ -1,11 +1,9 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
 #include <ESP32Encoder.h>
 #include <Preferences.h>
 #include "LatheParameter.h"
-#include "Button.h"
 #include "JogMode.h"
 #include "Setting.h"
 #include "config.h"
@@ -157,7 +155,7 @@ void setup() {
     secondCoreTask, /* Function to implement the task */
     "UserInterface", /* Name of the task */
     10000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
+    nullptr,  /* Task input parameter */
     2,  /* Priority of the task */
     &userInterfaceTask,  /* Task handle. */
     0

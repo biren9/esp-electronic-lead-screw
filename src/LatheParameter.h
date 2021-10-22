@@ -8,7 +8,7 @@
 class LatheParameter {
 
     public:
-        LatheParameter(Preferences* preferences);
+        explicit LatheParameter(Preferences* preferences);
 
         // Persisted
         int backlash();
