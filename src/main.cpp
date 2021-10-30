@@ -46,7 +46,7 @@ float encoderDeg = 0; // Winkel des encoders;
 
 void secondCoreTask( void * parameter) {
   displayHandler = new DisplayHandler();
-  buttonHandler = new ButtonHandler();
+  buttonHandler = new ButtonHandler(BUTTON_ADD_PIN, BUTTON_REMOVE_PIN, BUTTON_TARGET_PIN, BUTTON_POSITION_PIN, BUTTON_JOG_LEFT_PIN, BUTTON_JOG_RIGHT_PIN);
 
   for(;;) {
     buttonHandler->handleButtons(latheParameter);
@@ -163,7 +163,7 @@ void setup() {
 }
 
 void loop() {
-  // Curent encoder position
+  // Current encoder position
   encoderAct = encoder.getCount();
 
   // Stepperschritte pro Drehzahlencoder Schritt berechnen

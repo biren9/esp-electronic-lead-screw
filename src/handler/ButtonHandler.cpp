@@ -1,25 +1,21 @@
 #include "ButtonHandler.h"
-#include "config.h"
-#include "Button.h"
-
-ButtonConfig buttonConfigs[] = {
-  ButtonConfig{BUTTON_ADD_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_REMOVE_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_TARGET_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_POSITION_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_JOG_LEFT_PIN, readyToTrigger, 0, 0},
-  ButtonConfig{BUTTON_JOG_RIGHT_PIN, readyToTrigger, 0, 0},
-};
 
 int8_t maxCounter = 5;
 
-ButtonHandler::ButtonHandler() {
-    pinMode(BUTTON_ADD_PIN, INPUT_PULLUP);
-    pinMode(BUTTON_REMOVE_PIN, INPUT_PULLUP);
-    pinMode(BUTTON_TARGET_PIN, INPUT_PULLUP);
-    pinMode(BUTTON_POSITION_PIN, INPUT_PULLUP);
-    pinMode(BUTTON_JOG_LEFT_PIN, INPUT_PULLUP);
-    pinMode(BUTTON_JOG_RIGHT_PIN, INPUT_PULLUP);
+ButtonHandler::ButtonHandler(uint8_t pinAdd, uint8_t pinRemove, uint8_t pinTarget, uint8_t pinPosition, uint8_t pinJogLeft, uint8_t pinJogRight) {
+    pinMode(pinAdd, INPUT_PULLUP);
+    pinMode(pinRemove, INPUT_PULLUP);
+    pinMode(pinTarget, INPUT_PULLUP);
+    pinMode(pinPosition, INPUT_PULLUP);
+    pinMode(pinJogLeft, INPUT_PULLUP);
+    pinMode(pinJogRight, INPUT_PULLUP);
+
+    this->buttonConfigs[0] = ButtonConfig{pinAdd, readyToTrigger, 0, 0};
+    this->buttonConfigs[1] = ButtonConfig{pinRemove, readyToTrigger, 0, 0};
+    this->buttonConfigs[2] = ButtonConfig{pinTarget, readyToTrigger, 0, 0};
+    this->buttonConfigs[3] = ButtonConfig{pinPosition, readyToTrigger, 0, 0};
+    this->buttonConfigs[4] = ButtonConfig{pinJogLeft, readyToTrigger, 0, 0};
+    this->buttonConfigs[5] = ButtonConfig{pinJogRight, readyToTrigger, 0, 0};
 }
 
 void ButtonHandler::handleButtons(LatheParameter* latheParameter) {
