@@ -35,7 +35,6 @@ bool stepDelayDirection = false; // To reset stepDelayUs when direction changes.
 bool directionChanged = false;
 
 // Degree calculation
-int64_t encoderAbs=0;
 float encoderDeg = 0; // Winkel des encoders;
 
 // #################################################################################
