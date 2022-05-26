@@ -29,6 +29,11 @@ void DisplayHandler::updateDisplay(LatheParameter* latheParameter) {
           display.println("Target " + String(latheParameter->stepperTarget()));
         }
         display.println("Position " + String(latheParameter->stepperPosition()));
+
+        if (latheParameter->currentStopCode() != 0) {
+          display.println("Code " + String(latheParameter->currentStopCode()));
+        }
+
         break;
       }
       case SettingModeSetting:

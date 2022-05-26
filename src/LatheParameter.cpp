@@ -80,6 +80,7 @@ LatheParameter::LatheParameter(Preferences* preferences) {
 
     this->isAutoMoveToZeroValue = false;
     this->autoMoveToZeroMultiplierValue = 1.0f;
+    this->stopCode = 0;
 }
 
 int LatheParameter::backlash() {
@@ -130,6 +131,16 @@ void LatheParameter::setMaxRpm(int value) {
 }
 
 
+void LatheParameter::setRelativHandEncoderSteps(int value) {
+    this->relativHandEncoderStepsValue = value;
+}
+int LatheParameter::relativHandEncoderSteps() {
+    return this->relativHandEncoderStepsValue;
+}
+void LatheParameter::resetRelativHandEncoderSteps() {
+    this->relativHandEncoderStepsValue = 0;
+}
+
 Pitch LatheParameter::spindlePitch() {
   Pitch pitch;
   unsigned int feedIndex = this->feedIndex();
@@ -156,10 +167,12 @@ unsigned int LatheParameter::availablePitches() {
 void LatheParameter::startSpindel() {
   if (this->settingModeValue == SettingModeNone) {
     this->isSpindelEnabledValue = true;
+    this->stopCode = 0;
   }
 }
 
-void LatheParameter::stopSpindel() {
+void LatheParameter::stopSpindel(int8_t code) {
+  this->stopCode = code;
   this->isSpindelEnabledValue = false;
   this->isSpindelInSyncValue = false;
 }
@@ -182,6 +195,12 @@ void LatheParameter::setSettingMode(SettingMode value) {
     this->settingModeValue = value;
 }
 
+HandEncoderHighlight LatheParameter::handEncoderHighlight() {
+ return this->handEncoderHighlightValue;
+}
+void LatheParameter::setHandEncoderHighlight(HandEncoderHighlight value) {
+    this->handEncoderHighlightValue = value;
+}
 
 float LatheParameter::stepperPosition() {
     return this->stepperPositionValue;
@@ -227,4 +246,8 @@ float LatheParameter::autoMoveToZeroMultiplier() {
 }
 void LatheParameter::setAutoMoveToZeroMultiplier(float value) {
     this->autoMoveToZeroMultiplierValue = value;
+}
+
+int8_t LatheParameter::currentStopCode() {
+    return this->stopCode;
 }

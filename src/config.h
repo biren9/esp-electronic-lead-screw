@@ -6,6 +6,9 @@
 #define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32 0x7A
 
+#define HAND_ENCODER_A 0 // Hand encoder pin
+#define HAND_ENCODER_B 0 // Hand encoder pin
+
 #define ENCODER_A 14 // Drehzahlencoder Pin A
 #define ENCODER_B 27 // Drehzahlencoder Pin B
 #define ENCODER_PULS_PER_REVOLUTION 600 // Drehzahlencoder Pin B

@@ -11,6 +11,7 @@ class ButtonHandler {
         void handleButtons(LatheParameter* latheParameter);
 
     private:
+        void handleEncoderUpdate(LatheParameter* latheParameter);
         void handleButtonAdd(LatheParameter* latheParameter, ButtonConfig* button);
         void handleButtonRemove(LatheParameter* latheParameter, ButtonConfig* button);
         void handleButtonTarget(LatheParameter* latheParameter, ButtonConfig* button);

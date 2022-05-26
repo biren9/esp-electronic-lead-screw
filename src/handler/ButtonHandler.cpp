@@ -19,6 +19,7 @@ ButtonHandler::ButtonHandler(uint8_t pinAdd, uint8_t pinRemove, uint8_t pinTarge
 }
 
 void ButtonHandler::handleButtons(LatheParameter* latheParameter) {
+    this->handleEncoderUpdate(latheParameter);
     this->handleButtonAdd(latheParameter, &buttonConfigs[0]);
     this->handleButtonRemove(latheParameter, &buttonConfigs[1]);
     this->handleButtonTarget(latheParameter, &buttonConfigs[2]);
@@ -30,7 +31,7 @@ void ButtonHandler::handleButtonAdd(LatheParameter* latheParameter, ButtonConfig
     switch (Button::checkButtonState(button)) {
     case recognizedLong:
       if (latheParameter->settingMode() == SettingModeNone) {
-        latheParameter->stopSpindel();
+        latheParameter->stopSpindel(3);
         latheParameter->setSettingMode(SettingModeSetting);
       } else {
         latheParameter->setSettingMode(Setting::next(latheParameter->settingMode()));
@@ -115,7 +116,7 @@ switch (Button::checkButtonState(button)) {
       break;
     case recognizedShort:
       if (latheParameter->isSpindelEnabled()) {
-        latheParameter->stopSpindel();
+        latheParameter->stopSpindel(4);
       } else {
         latheParameter->startSpindel();
       }
@@ -133,7 +134,7 @@ void ButtonHandler::handleButtonPosition(LatheParameter* latheParameter, ButtonC
       button->handled();
       break;
     case recognizedShort:
-      latheParameter->stopSpindel();
+      latheParameter->stopSpindel(5);
       latheParameter->setAutoMoveToZeroMultiplier(1.0f);
       latheParameter->setAutoMoveToZero(!latheParameter->isAutoMoveToZero());
       button->handled();
@@ -151,17 +152,58 @@ void ButtonHandler::handleButtonJog(LatheParameter* latheParameter, ButtonConfig
         latheParameter->setCurrentJogMode(left);
       }
     
-      latheParameter->stopSpindel();
+      latheParameter->stopSpindel(6);
     } else if (digitalRead(buttonRight->pin) == LOW) {
       latheParameter->setJogReadCounter(min(latheParameter->jogReadCounter()+1, -maxCounter));
       if (latheParameter->currentJogMode() != right && latheParameter->jogReadCounter() <= maxCounter) {
         latheParameter->setJogCurrentSpeedMultiplier(1.0f);
         latheParameter->setCurrentJogMode(right);
       }
-      latheParameter->stopSpindel();
+      latheParameter->stopSpindel(7);
     } else {
       latheParameter->setJogReadCounter(0);
       latheParameter->setJogCurrentSpeedMultiplier(1.0f);
       latheParameter->setCurrentJogMode(neutral);
     }
+}
+
+void ButtonHandler::handleEncoderUpdate(LatheParameter* latheParameter) {
+  int offset = latheParameter->relativHandEncoderSteps();
+  latheParameter->resetRelativHandEncoderSteps();
+
+  if (offset == 0) {
+    // Nothing to handle!
+    return;
+  }
+
+   switch (latheParameter->handEncoderHighlight()) {
+     case HandEncoderHighlightJog: {
+        if (offset < 0) {
+          //handle jog left
+        } else {
+          //handle jog right
+        }
+        break;
+     }
+      case HandEncoderHighlightPitch: {
+        unsigned int size = latheParameter->availablePitches();
+        unsigned int newIndex;
+
+        if (offset < 0) {
+          if (latheParameter->feedIndex() == 0u) {
+            newIndex = 0;
+          } else {
+            newIndex = latheParameter->feedIndex()-1;
+          }
+        } else {
+          newIndex = min(latheParameter->feedIndex()+(unsigned int)offset, size-1u);
+        }
+        latheParameter->setFeedIndex(newIndex);
+        break;
+      }
+      case HandEncoderHighlightTarget: {
+        latheParameter->setStepperTarget(latheParameter->stepperTarget() + offset/100.f);
+        break;
+      }
+   }
 }

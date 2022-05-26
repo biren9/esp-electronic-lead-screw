@@ -18,6 +18,9 @@ DisplayHandler* displayHandler;
 ButtonHandler* buttonHandler;
 
 // RPM Encoder
+ESP32Encoder handEncoder;
+int64_t handEncoderLastSteps = 0;
+
 ESP32Encoder encoder;
 int64_t encoderLastUpm = 0;     // letzte Position des Encoders (UPM) in Steps *4 (Quad)
 int64_t encoderAct = 0;      // aktue Position des Encoders in Steps *4 (Quad)
@@ -48,6 +51,8 @@ void secondCoreTask( void * parameter) {
   buttonHandler = new ButtonHandler(BUTTON_ADD_PIN, BUTTON_REMOVE_PIN, BUTTON_TARGET_PIN, BUTTON_POSITION_PIN, BUTTON_JOG_LEFT_PIN, BUTTON_JOG_RIGHT_PIN);
 
   for(;;) {
+    latheParameter->setRelativHandEncoderSteps(handEncoder.getCount());
+    handEncoder.clearCount();
     buttonHandler->handleButtons(latheParameter);
     displayHandler->updateDisplay(latheParameter);
     delay(20);
@@ -117,7 +122,7 @@ bool startSingleStep(bool dir, bool isJog) {
 
  if (!isnan(latheParameter->stepperTarget()) && (abs(latheParameter->stepperTarget() - latheParameter->stepperPosition()) <= THRESHOLD) && !directionChanged && !isJog) {
     Serial.println("Target reached");
-    latheParameter->stopSpindel();
+    latheParameter->stopSpindel(1);
     return false; // Target reached!
   }
 
@@ -144,6 +149,9 @@ void setup() {
   ESP32Encoder::useInternalWeakPullResistors = UP;
   encoder.attachFullQuad(ENCODER_A, ENCODER_B);
   encoder.clearCount();
+
+  handEncoder.attachFullQuad(HAND_ENCODER_A, HAND_ENCODER_B);
+  handEncoder.clearCount();
 
   pinMode(DIR_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
@@ -179,7 +187,7 @@ void loop() {
 
     // Stop the spindel if we are running to fast.
     if (latheParameter->rpm() > latheParameter->maxRpm()) {
-      latheParameter->stopSpindel();
+      latheParameter->stopSpindel(2);
     }
   }
 

@@ -3,6 +3,7 @@
 #include "Pitch.h"
 #include "Setting.h"
 #include "JogMode.h"
+#include "HandEncoderHighlight.h"
 #include <Preferences.h>
 
 class LatheParameter {
@@ -29,18 +30,25 @@ class LatheParameter {
         void setRpm(int value);
         void setMaxRpm(int value);
 
+        void setRelativHandEncoderSteps(int value);
+        int relativHandEncoderSteps();
+        void resetRelativHandEncoderSteps();
+
         // Calculated parameters
         Pitch spindlePitch();
         unsigned int availablePitches();
 
         void startSpindel();
-        void stopSpindel();
+        void stopSpindel(int8_t code);
         bool isSpindelEnabled();
         bool isSpindelInSync();
         void setSpindelInSync();
 
         SettingMode settingMode();
         void setSettingMode(SettingMode value);
+
+        HandEncoderHighlight handEncoderHighlight();
+        void setHandEncoderHighlight(HandEncoderHighlight value);
 
         float stepperPosition();
         void setStepperPosition(float value);
@@ -59,7 +67,10 @@ class LatheParameter {
         float autoMoveToZeroMultiplier();
         void setAutoMoveToZeroMultiplier(float value);
 
+        int8_t currentStopCode();
+
     private:
+        int8_t stopCode;
         Preferences* preferences;
         int backlashValue;
         unsigned int feedIndexValue;
@@ -69,9 +80,12 @@ class LatheParameter {
         int rpmValue;
         int maxRpmValue;
 
+        int relativHandEncoderStepsValue;
+
         bool isSpindelEnabledValue;
         bool isSpindelInSyncValue;
 
+        HandEncoderHighlight handEncoderHighlightValue;
         SettingMode settingModeValue;
 
         float stepperPositionValue;
